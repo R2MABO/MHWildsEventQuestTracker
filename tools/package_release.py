@@ -3,10 +3,10 @@ from pathlib import Path
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = [ROOT / name for name in ('app.py', 'README.md', 'LICENSE', '.gitignore', 'start.bat', 'start.sh', 'start.command')]
+FILES = [ROOT / name for name in ('app.py', 'catalogs.py', 'README.md', 'LICENSE', '.gitignore', 'start.bat', 'start.sh', 'start.command')]
 FILES += sorted((ROOT / 'web').glob('*'))
-FILES += [ROOT / 'seed' / 'catalog.zip']
-FILES += [ROOT / 'tests' / 'test_tracker.py', ROOT / 'tools' / 'package_release.py']
+FILES += sorted(path for path in (ROOT / 'seed').rglob('*') if path.is_file())
+FILES += [ROOT / 'tests' / 'test_tracker.py', ROOT / 'tests' / 'test_catalogs.py', ROOT / 'tools' / 'package_release.py', ROOT / 'tools' / 'fetch_monsters.py']
 
 
 def main():

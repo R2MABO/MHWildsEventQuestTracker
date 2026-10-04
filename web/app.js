@@ -44,7 +44,7 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-let state = { quests: [], reward_types: [], monster_types: [], ranks: [] };
+let state = { quests: [], reward_types: [], monster_types: [], ranks: [], catalogs: {} };
 let editing = null;
 let draftImages = [];
 let importPreview = null;
@@ -52,8 +52,38 @@ let imageSet = null;
 let toastTimer;
 const expanded = new Set();
 const rewardFilter = new Set();
-const filterIds = ['filter-status', 'filter-rank', 'filter-stars', 'filter-hr', 'filter-monster', 'filter-type'];
+const filterIds = ['filter-status', 'filter-rank', 'filter-stars', 'filter-hr', 'filter-monster', 'filter-type', 'filter-area', 'filter-quest-type', 'filter-tag'];
 const csrf = document.querySelector('meta[name="tracker-token"]').content;
+const catalogLabels = { monster: 'Monster', state: 'Monsterzustand', rank: 'Rang', reward_type: 'Belohnungsart', area: 'Gebiet', quest_type: 'Questtyp', tag: 'Tag' };
+let entityEditing = null;
+let entityKind = 'monster';
+let entityIcon = null;
+let entityCallback = null;
+let mergeSource = null;
+function records(kind) { return state.catalogs[kind] || []; }
+function recordById(kind, id) { return records(kind).find(r => r.id === id); }
+function recordByName(kind, name) { return records(kind).find(r => r.name === name || r.aliases?.includes(name)); }
+function catalogOptions(select, kind, empty = null) {
+  const old = select.value;
+  select.replaceChildren();
+  if (empty !== null) select.append(el('option', { value: '', text: empty }));
+  records(kind).forEach(record => select.append(el('option', { value: record.id, text: record.is_none ? 'Normal / ohne Zustand' : record.name })));
+  if ([...select.options].some(option => option.value === old)) select.value = old;
+}
+function monsterGlyph(monster, status = null) {
+  const frame = el('span', { class: 'monster-glyph', title: `${monster?.name || 'Monster wählen'}${status && !status.is_none ? ` · ${status.name}` : ''}` }, monster?.icon ? [el('img', { src: `/images/${monster.icon}`, alt: monster.name, loading: 'lazy' })] : [icon('hunt')]);
+  if (status?.color && !status.is_none) frame.style.border = `3px solid ${status.color}`;
+  return frame;
+}
+function statePill(status) {
+  if (!status || status.is_none) return null;
+  const pill = el('span', { class: 'state-pill', text: status.name });
+  pill.style.backgroundColor = status.color;
+  const hex = status.color.slice(1);
+  const brightness = (parseInt(hex.slice(0,2),16)*299 + parseInt(hex.slice(2,4),16)*587 + parseInt(hex.slice(4,6),16)*114)/1000;
+  pill.style.color = brightness > 150 ? '#142017' : '#ffffff';
+  return pill;
+}
 
 function toast(message, error = false) {
   clearTimeout(toastTimer);
@@ -101,21 +131,38 @@ function tagChecks(container, values, selected, onChange) {
   }));
 }
 function knownMonsters() {
-  return [...new Set(state.quests.flatMap(q => q.targets.map(t => t.monster)))].sort((a, b) => a.localeCompare(b, 'de'));
+  return records('monster').map(r => r.name).sort((a, b) => a.localeCompare(b, 'de'));
 }
 async function loadState() {
   state = await api('/api/state');
+  for (const value of rewardFilter) if (!state.reward_types.includes(value)) rewardFilter.delete(value);
   options($('filter-rank'), state.ranks, 'Alle Ränge');
   options($('filter-type'), state.monster_types, 'Alle Arten');
   options($('filter-stars'), [...new Set(state.quests.map(q => q.stars))].sort((a, b) => a - b), 'Alle');
   options($('filter-monster'), knownMonsters(), 'Alle Monster');
-  $('monster-suggestions').replaceChildren(...knownMonsters().map(monster => el('option', { value: monster })));
+  options($('filter-area'), records('area').map(r=>r.name), 'Alle Gebiete');
+  options($('filter-quest-type'), records('quest_type').map(r=>r.name), 'Alle Questtypen');
+  options($('filter-tag'), records('tag').map(r=>r.name), 'Alle Tags');
   tagChecks($('reward-filters'), state.reward_types, rewardFilter, (value, checked) => {
     if (checked) rewardFilter.add(value); else rewardFilter.delete(value);
     render();
   });
-  options($('quest-rank'), state.ranks);
+  refreshEditorCatalogs();
+  if ($('catalog-dialog').open) renderCatalogs();
   render();
+}
+function refreshEditorCatalogs() {
+  catalogOptions($('quest-rank'), 'rank');
+  catalogOptions($('quest-area'), 'area', 'Keine Angabe');
+  catalogOptions($('quest-type'), 'quest_type', 'Keine Angabe');
+  for (const row of $('target-rows').children) {
+    catalogOptions(row.querySelector('.target-kind'), 'state');
+    row.querySelector('.target-monster').updatePreview?.();
+  }
+  for (const [container, kind] of [['editor-reward-types', 'reward_type'], ['editor-tags', 'tag']]) {
+    const checked = new Set([...$(container).querySelectorAll('input:checked')].map(input=>input.value));
+    tagChecks($(container), records(kind).map(r=>r.name), checked, ()=>{});
+  }
 }
 
 function targetText(target) {
@@ -126,10 +173,9 @@ function rewardText(q) { return q.rewards.map(r => `${r.name}${r.required ? ` ($
 function targetsNode(q) {
   const node = el('div', { class: 'quest-targets' });
   q.targets.forEach((t, index) => {
-    if (index) node.append(' + ');
-    if (t.count > 1) node.append(`${t.count} × `);
-    if (t.type !== 'Normal') node.append(el('span', { class: `monster-kind ${t.type.toLowerCase()}`, text: `${t.type} ` }));
-    node.append(t.monster);
+    const monster = recordById('monster', t.monster_id) || recordByName('monster', t.monster);
+    const status = recordById('state', t.type_id) || recordByName('state', t.type);
+    node.append(el('span', { class: 'target-display' }, [monsterGlyph(monster, status), el('span', { class: 'target-info' }, [el('span', { class:'target-name', text: `${t.count > 1 ? `${t.count} × ` : ''}${t.monster}` }), statePill(status)])]));
   });
   return node;
 }
@@ -160,6 +206,9 @@ function filteredQuests() {
     if (hr !== '' && q.hr != null && q.hr > Number(hr)) return false;
     if ((monster || kind) && !q.targets.some(t => (!monster || t.monster === monster) && (!kind || t.type === kind))) return false;
     if (rewardFilter.size && !q.reward_types.some(t => rewardFilter.has(t))) return false;
+    if ($('filter-area').value && q.area !== $('filter-area').value) return false;
+    if ($('filter-quest-type').value && q.quest_type !== $('filter-quest-type').value) return false;
+    if ($('filter-tag').value && !(q.tags || []).includes($('filter-tag').value)) return false;
     return true;
   });
   const sort = $('sort').value;
@@ -258,6 +307,7 @@ function detailNode(q) {
   const first = el('div', {}, [el('h3', { class: 'detail-title', text: 'JAGD & BELOHNUNGEN' })]);
   q.targets.forEach(t => first.append(el('p', { class: 'detail-line', text: targetText(t) })));
   first.append(el('p', { class: 'detail-line', text: rankText(q) }));
+  if (q.area || q.quest_type || q.tags?.length) first.append(el('p', { class:'detail-line', text:[q.area, q.quest_type, ...(q.tags || [])].filter(Boolean).join(' · ') }));
   q.rewards.forEach(r => first.append(el('p', { class: 'detail-line', text: `${r.name}${r.required ? ` · ${r.required} benötigt` : ''}` })));
   if (q.notes) first.append(el('h3', { class: 'detail-title', text: 'NOTIZEN' }), el('p', { class: 'detail-notes', text: q.notes }));
   const second = el('div', {}, [el('h3', { class: 'detail-title', text: `BELOHNUNGSBILDER${q.images.length ? ` · ${q.images.length}` : ''}` })]);
@@ -274,17 +324,41 @@ function resetFilters() {
 
 let rowCounter = 0;
 function labeledInput(label, input) {
-  input.id = `dynamic-field-${++rowCounter}`;
-  return el('div', {}, [el('div', { class: 'row-caption' }, [el('label', { htmlFor: input.id, text: label })]), input]);
+  const control = input.matches('input,select,textarea') ? input : input.querySelector('select,summary') || input;
+  control.id = `dynamic-field-${++rowCounter}`;
+  return el('div', {}, [el('div', { class: 'row-caption' }, [el('label', { htmlFor: control.id, text: label })]), input]);
 }
 function addTarget(target = { count: 1, monster: '', type: 'Normal' }) {
   if ($('target-rows').children.length >= 30) { toast('Maximal 30 Jagdziele.', true); return; }
   const count = el('input', { type: 'number', min: 1, max: 100, value: target.count, required: true, class: 'target-count' });
-  const monster = el('input', { value: target.monster, required: true, maxLength: 200, list: 'monster-suggestions', placeholder: 'Monstername', class: 'target-monster' });
   const kind = el('select', { class: 'target-kind' });
-  options(kind, state.monster_types); kind.value = target.type;
+  catalogOptions(kind, 'state'); kind.value = target.type_id || recordByName('state', target.type)?.id || records('state').find(s=>s.is_none)?.id || '';
+  const monster = el('input', { type:'hidden', value: target.monster_id || recordByName('monster', target.monster)?.id || '', class:'target-monster' });
+  const picker = el('details', { class:'monster-picker' });
+  const summary = el('summary', { 'aria-label':'Monster auswählen' });
+  const search = el('input', { type:'search', placeholder:'Monster suchen …', 'aria-label':'Monsterliste durchsuchen' });
+  const choices = el('div', { class:'monster-choices' });
+  function updatePreview() {
+    const selected = recordById('monster', monster.value);
+    summary.replaceChildren(monsterGlyph(selected, recordById('state', kind.value)), el('span', {text:selected?.name || 'Monster wählen'}), icon('chevron'));
+    summary.setAttribute('aria-label', `Monster auswählen: ${selected?.name || 'Keine Auswahl'}`);
+  }
+  monster.updatePreview = updatePreview;
+  function updateChoices() {
+    const query = search.value.toLocaleLowerCase('de');
+    const matches = records('monster').filter(r=>[r.name, ...r.aliases].some(n=>n.toLocaleLowerCase('de').includes(query))).sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    choices.replaceChildren(...matches.map(r=>el('button', {type:'button', class:'monster-choice', 'aria-label':r.name, onclick:()=>{monster.value=r.id; picker.open=false; updatePreview(); summary.focus();}}, [monsterGlyph(r), r.name])));
+    if (!matches.length) choices.append(el('p', {class:'field-help', text:'Kein Monster gefunden. Über + kannst du eines anlegen.'}));
+  }
+  picker.addEventListener('toggle', ()=>{ if(picker.open){search.value='';updateChoices();search.focus();} });
+  search.addEventListener('input', updateChoices);
+  kind.addEventListener('change', updatePreview);
+  picker.append(summary, el('div', {class:'monster-popover'}, [search, choices]), monster);
+  updatePreview();
+  const monsterAdd = el('button', {type:'button', class:'icon-button', 'aria-label':'Monster hinzufügen', onclick:()=>openEntity('monster', null, record=>{monster.value=record.id; updatePreview();})}, [icon('plus')]);
+  const stateAdd = el('button', {type:'button', class:'icon-button', 'aria-label':'Monsterzustand hinzufügen', onclick:()=>openEntity('state', null, record=>{kind.value=record.id; updatePreview();})}, [icon('plus')]);
   const remove = el('button', { type: 'button', class: 'icon-button remove-target', 'aria-label': 'Jagdziel entfernen', onclick: () => { row.remove(); updateTargetButtons(); } }, [icon('close')]);
-  const row = el('div', { class: 'dynamic-row target-row' }, [labeledInput('Anzahl', count), labeledInput('Monster', monster), labeledInput('Monsterart', kind), remove]);
+  const row = el('div', { class: 'dynamic-row target-row' }, [labeledInput('Anzahl', count), labeledInput('Monster', el('div', {class:'select-add'}, [picker, monsterAdd])), labeledInput('Zustand', el('div', {class:'select-add'}, [kind, stateAdd])), remove]);
   $('target-rows').append(row);
   updateTargetButtons();
 }
@@ -305,9 +379,12 @@ function openEditor(q = null) {
   $('delete-quest').hidden = !q;
   $('quest-name').value = q?.name || '';
   $('quest-stars').value = q?.stars || 4;
-  $('quest-rank').value = q?.rank || 'High-Rank';
+  $('quest-rank').value = q?.rank_id || recordByName('rank', q?.rank || 'High-Rank')?.id || '';
   $('quest-hr').value = q?.hr ?? '';
   $('quest-notes').value = q?.notes || '';
+  $('quest-area').value = q?.area_id || '';
+  $('quest-type').value = q?.quest_type_id || '';
+  tagChecks($('editor-tags'), records('tag').map(r=>r.name), new Set(q?.tags || []), ()=>{});
   $('target-rows').replaceChildren();
   (q?.targets || [{ count: 1, monster: '', type: 'Normal' }]).forEach(addTarget);
   $('reward-rows').replaceChildren();
@@ -326,11 +403,22 @@ async function saveQuest(event) {
     const q = {
       id: editing?.id,
       name: $('quest-name').value.trim(),
-      targets: [...$('target-rows').children].map(row => ({ count: Number(row.querySelector('.target-count').value), monster: row.querySelector('.target-monster').value.trim(), type: row.querySelector('.target-kind').value })),
-      rank: $('quest-rank').value,
+      targets: [...$('target-rows').children].map(row => {
+        const monster = recordById('monster', row.querySelector('.target-monster').value);
+        const status = recordById('state', row.querySelector('.target-kind').value);
+        if (!monster || !status) throw new Error('Für jedes Jagdziel bitte Monster und Zustand auswählen.');
+        return {count:Number(row.querySelector('.target-count').value), monster:monster.name, monster_id:monster.id, type:status.name, type_id:status.id};
+      }),
+      rank: recordById('rank', $('quest-rank').value)?.name,
+      rank_id: $('quest-rank').value,
       stars: Number($('quest-stars').value),
       hr: $('quest-hr').value === '' ? null : Number($('quest-hr').value),
       reward_types: [...$('editor-reward-types').querySelectorAll('input:checked')].map(input => input.value),
+      reward_type_ids: [...$('editor-reward-types').querySelectorAll('input:checked')].map(input => recordByName('reward_type', input.value).id),
+      tags: [...$('editor-tags').querySelectorAll('input:checked')].map(input=>input.value),
+      tag_ids: [...$('editor-tags').querySelectorAll('input:checked')].map(input=>recordByName('tag',input.value).id),
+      area: recordById('area',$('quest-area').value)?.name || '', area_id: $('quest-area').value || null,
+      quest_type: recordById('quest_type',$('quest-type').value)?.name || '', quest_type_id: $('quest-type').value || null,
       rewards: [...$('reward-rows').children].map(row => ({ name: row.querySelector('.reward-input').value.trim(), required: row.querySelector('.required-input').value.trim() })),
       images: [...draftImages], notes: $('quest-notes').value.trim(),
     };
@@ -413,7 +501,8 @@ async function previewImport() {
   if (file.size > 120 * 1024 * 1024) { toast('ZIP darf höchstens 120 MB groß sein.', true); return; }
   await safely(() => busy('Questliste wird geprüft …', async () => {
     importPreview = await api('/api/import/preview', await file.arrayBuffer(), true);
-    $('import-summary').textContent = `${file.name} · ${importPreview.rows.length} Quests · ${importPreview.source}`;
+    $('import-summary').textContent = `${file.name} · ${importPreview.rows.length} Quests · ${importPreview.catalog_count} Stammdateneinträge · ${importPreview.source}`;
+    $('update-catalogs').checked = false;
     $('restore-option').hidden = !importPreview.has_progress;
     $('restore-progress').checked = false;
     $('import-warnings').hidden = !importPreview.warnings.length;
@@ -456,25 +545,137 @@ function updateImportCounts() {
 }
 async function commitImport() {
   await safely(() => busy('Questliste wird übernommen …', async () => {
-    const result = await api('/api/import/commit', { token: importPreview.token, choices: importChoices(), restore_progress: $('restore-progress').checked });
+    const result = await api('/api/import/commit', { token: importPreview.token, choices: importChoices(), restore_progress: $('restore-progress').checked, update_catalogs:$('update-catalogs').checked });
     $('import-dialog').close();
     await loadState();
     toast(`${result.added} Quests hinzugefügt, ${result.updated} aktualisiert, ${result.skipped} übersprungen.`);
   }));
 }
 
+function toggleCreateMenu() {
+  const menu = $('create-menu');
+  menu.hidden = !menu.hidden;
+  $('new-quest').setAttribute('aria-expanded', String(!menu.hidden));
+  if (!menu.hidden) menu.querySelector('button')?.focus();
+}
+function closeCreateMenu() { $('create-menu').hidden = true; $('new-quest').setAttribute('aria-expanded','false'); }
+function openCatalogs(kind = 'monster') {
+  $('catalog-kind').value = kind;
+  $('catalog-search').value = '';
+  renderCatalogs(); $('catalog-dialog').showModal();
+}
+function usesRecord(r) {
+  return state.quests.filter(q => r.kind === 'monster' ? q.targets.some(t=>t.monster_id===r.id) : r.kind === 'state' ? q.targets.some(t=>t.type_id===r.id) : r.kind === 'reward_type' ? q.reward_type_ids.includes(r.id) : r.kind === 'tag' ? q.tag_ids.includes(r.id) : q[`${r.kind}_id`]===r.id).length;
+}
+function renderCatalogs() {
+  const kind = $('catalog-kind').value;
+  const term = $('catalog-search').value.trim().toLocaleLowerCase('de');
+  const rows = records(kind).filter(r=>[r.name,...r.aliases].some(n=>n.toLocaleLowerCase('de').includes(term)));
+  $('catalog-list').replaceChildren(...rows.map(r=> {
+    const preview = kind === 'monster' ? monsterGlyph(r) : kind === 'state' ? statePill(r) : null;
+    const info = el('div', {class:'catalog-info'}, [el('strong',{text:r.name}),el('small',{text:`${usesRecord(r)} Quests${r.aliases.length ? ` · Auch bekannt als: ${r.aliases.join(', ')}` : ''}`})]);
+    const actions = el('div',{class:'catalog-actions'});
+    if (!r.is_none) {
+      actions.append(el('button',{class:'button subtle',text:'Bearbeiten',onclick:()=>openEntity(kind,r)}));
+      if (records(kind).length>1) actions.append(el('button',{class:'text-button',text:'Zusammenführen',onclick:()=>openMerge(r)}));
+    }
+    return el('div',{class:'catalog-row'},[preview,info,actions]);
+  }));
+  if (!rows.length) $('catalog-list').append(el('p',{class:'field-help',text:'Noch keine passenden Einträge. Mit „+ Eintrag“ kannst du einen anlegen.'}));
+}
+function updateColor(value) {
+  if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+  $('entity-color').value=value; $('entity-color-hex').value=value.toUpperCase();
+  const preview=statePill({name:$('entity-name').value || 'Vorschau',color:value});
+  $('entity-color-preview').replaceChildren(preview);
+}
+function renderEntityIcon() {
+  $('entity-icon-preview').replaceChildren(monsterGlyph({name:$('entity-name').value || 'Monster',icon:entityIcon}));
+  $('entity-icon-remove').hidden = !entityIcon;
+}
+function openEntity(kind, record=null, callback=null) {
+  entityKind=kind; entityEditing=record; entityCallback=callback; entityIcon=record?.icon || null;
+  $('entity-form').reset();
+  $('entity-title').textContent=`${catalogLabels[kind]} ${record ? 'bearbeiten' : 'anlegen'}`;
+  $('entity-name').value=record?.name || '';
+  $('entity-state-fields').hidden=kind!=='state';
+  $('entity-color-hex').required=kind==='state';
+  $('entity-monster-fields').hidden=kind!=='monster';
+  $('entity-rank-fields').hidden=kind!=='rank';
+  $('entity-stars-min').value=record?.stars_min ?? '';
+  $('entity-stars-max').value=record?.stars_max ?? '';
+  updateColor(record?.color || '#7837FC'); renderEntityIcon();
+  $('entity-dialog').showModal(); $('entity-name').focus();
+}
+async function saveEntity(event) {
+  event.preventDefault();
+  await safely(async()=> {
+    const raw={...(entityEditing || {}),kind:entityKind,name:$('entity-name').value.trim()};
+    if (entityKind==='state') raw.color=$('entity-color-hex').value;
+    if (entityKind==='monster') raw.icon=entityIcon;
+    if (entityKind==='rank') { raw.stars_min=$('entity-stars-min').value ? Number($('entity-stars-min').value) : null; raw.stars_max=$('entity-stars-max').value ? Number($('entity-stars-max').value) : null; }
+    $('entity-save').disabled=true;
+    try {
+      const result=await api(entityEditing ? '/api/catalog/save' : '/api/catalog/create',raw);
+      $('entity-dialog').close(); await loadState();
+      entityCallback?.(result); toast(`${catalogLabels[entityKind]} gespeichert.`);
+    } finally { $('entity-save').disabled=false; }
+  });
+}
+function openMerge(record) {
+  mergeSource=record;
+  $('merge-source-label').textContent=`„${record.name}“ wird in den gewählten Eintrag übernommen.`;
+  $('merge-target').replaceChildren(...records(record.kind).filter(r=>r.id!==record.id && !r.is_none).map(r=>el('option',{value:r.id,text:r.name})));
+  $('merge-dialog').showModal();
+}
+async function uploadEntityIcon() {
+  const file=$('entity-icon-input').files[0]; $('entity-icon-input').value='';
+  if (!file) return;
+  await safely(()=>busy('Monster-Icon wird gespeichert …',async()=>{
+    if(file.size>20*1024*1024) throw new Error('Das Icon darf höchstens 20 MB groß sein.');
+    const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(new Error('Icon konnte nicht gelesen werden.'));reader.readAsDataURL(file);});
+    entityIcon=(await api('/api/image',{data:encoded})).key; renderEntityIcon();
+  }));
+}
+Object.entries(catalogLabels).forEach(([kind,label])=>$('catalog-kind').append(el('option',{value:kind,text:label})));
+$('create-menu').append(el('button',{role:'menuitem',text:'Neue Quest',onclick:()=>{closeCreateMenu();openEditor();}}));
+Object.entries(catalogLabels).forEach(([kind,label])=>$('create-menu').append(el('button',{role:'menuitem',text:`${label} anlegen`,onclick:()=>{closeCreateMenu();openEntity(kind);}})));
+$('create-menu').append(el('button',{role:'menuitem',text:'Stammdaten verwalten',onclick:()=>{closeCreateMenu();openCatalogs();}}));
+document.addEventListener('click',event=>{if(!event.target.closest('.create-actions'))closeCreateMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('create-menu').hidden){closeCreateMenu();$('new-quest').focus();}});
+$('manage-catalogs').addEventListener('click',()=>openCatalogs());
+$('catalog-kind').addEventListener('change',renderCatalogs);
+$('catalog-search').addEventListener('input',renderCatalogs);
+$('catalog-add').addEventListener('click',()=>openEntity($('catalog-kind').value));
+$('entity-form').addEventListener('submit',saveEntity);
+$('entity-color').addEventListener('input',()=>updateColor($('entity-color').value));
+$('entity-color-hex').addEventListener('input',()=>updateColor($('entity-color-hex').value));
+$('entity-name').addEventListener('input',()=>updateColor($('entity-color').value));
+$('entity-icon-input').addEventListener('change',uploadEntityIcon);
+$('entity-icon-remove').addEventListener('click',()=>{entityIcon=null;renderEntityIcon();});
+document.querySelectorAll('[data-add-kind]').forEach(button=>button.addEventListener('click',()=>openEntity(button.dataset.addKind,null,r=>{
+  if(button.dataset.addSelect) $(button.dataset.addSelect).value=r.id;
+  if(['tag','reward_type'].includes(r.kind)) { const container=$(r.kind==='tag'?'editor-tags':'editor-reward-types'); [...container.querySelectorAll('input')].find(input=>input.value===r.name).checked=true; }
+})));
+$('merge-form').addEventListener('submit',event=>{event.preventDefault();safely(async()=>{
+  $('merge-save').disabled=true;
+  try {await api('/api/catalog/merge',{source_id:mergeSource.id,target_id:$('merge-target').value});$('merge-dialog').close();await loadState();toast('Einträge zusammengeführt.');}
+  finally {$('merge-save').disabled=false;}
+});});
+
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
 filterIds.forEach(id => $(id).addEventListener(id === 'filter-hr' ? 'input' : 'change', render));
 $('search').addEventListener('input', render);
 $('sort').addEventListener('change', render);
 $('reset-filters').addEventListener('click', resetFilters);
-$('new-quest').addEventListener('click', () => openEditor());
+$('new-quest').addEventListener('click', toggleCreateMenu);
 $('add-target').addEventListener('click', () => addTarget());
 $('add-reward').addEventListener('click', () => addReward());
 $('quest-form').addEventListener('submit', saveQuest);
 $('quest-stars').addEventListener('input', () => {
   const stars = Number($('quest-stars').value);
-  if (stars >= 1) $('quest-rank').value = stars <= 3 ? 'Low-Rank' : stars <= 10 ? 'High-Rank' : 'Master-Rank';
+  const rank = records('rank').find(r=>r.stars_min != null && stars>=r.stars_min && (r.stars_max == null || stars<=r.stars_max));
+  if (rank) $('quest-rank').value = rank.id;
 });
 $('image-input').addEventListener('change', uploadImages);
 $('delete-quest').addEventListener('click', () => safely(async () => {

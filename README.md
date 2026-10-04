@@ -20,29 +20,39 @@ Direktstart: `python3 app.py` beziehungsweise `py -3 app.py`. `--no-browser` ver
 
 ```
 data/
-  quests.sqlite       # Questdaten ohne Häkchen
-  images/             # Belohnungsbilder, über Inhalts-Hash referenziert
+  quests.sqlite       # Quests und Stammdaten ohne Häkchen
+  images/             # Belohnungsbilder und Monster-Icons, über Inhalts-Hash referenziert
   userdata.sqlite     # Persönliche Häkchen und bestätigte fremde Quest-IDs
 seed/
   catalog.zip         # Mitgelieferte erste Questliste, ohne Nutzerdaten
 ```
 
-Die mitgelieferte Liste enthält 53 Quests und 49 Bilder aus dem bereitgestellten Notion-Export. Beim Erstimport auf dem ursprünglichen Rechner werden bestehende Häkchen in `userdata.sqlite` übernommen. Ein neuer Datenordner startet mit derselben Questliste **ohne** persönlichen Fortschritt. Der Seed wird nur beim erstmaligen Erstellen der Katalogdatenbank geladen; eine bewusst geleerte Liste bleibt leer.
+Die mitgelieferte Liste enthält 53 Quests und 49 Belohnungsbilder aus dem bereitgestellten Notion-Export sowie 35 große Monster einschließlich Varianten und ein Unbekannt-Icon. Die Icons stammen aus dem [Monster Hunter Wiki](https://monsterhunterwiki.org/wiki/Category:MHWilds_Monster_Icons); Einzelquellen stehen in `seed/ICON_SOURCES.md`. Beim Erstimport auf dem ursprünglichen Rechner werden bestehende Häkchen in `userdata.sqlite` übernommen. Ein neuer Datenordner startet mit derselben Questliste **ohne** persönlichen Fortschritt. Der Seed wird nur beim erstmaligen Erstellen der Katalogdatenbank geladen; eine bewusst geleerte Liste bleibt leer.
 
-**Zum Teilen „Questliste teilen“ verwenden.** Die ZIP enthält ausschließlich `catalog.json` und zugehörige Bilder. Häkchen und Import-Zuordnungen sind darin nicht enthalten. Den gesamten `data/`-Ordner oder den originalen Notion-Export nicht als öffentlichen Questkatalog weitergeben: Sie enthalten persönliche Daten.
+**Zum Teilen „Questliste teilen“ verwenden.** Die ZIP enthält ausschließlich `catalog.json` mit Quests, Stammdaten und deren gemeinsamen Namens-/ID-Zuordnungen sowie zugehörige Bilder und Icons. Häkchen und persönliche Quest-Import-Zuordnungen sind darin nicht enthalten. Den gesamten `data/`-Ordner oder den originalen Notion-Export nicht als öffentlichen Questkatalog weitergeben: Sie enthalten persönliche Daten.
 
 Das Archivsymbol neben „Questliste teilen“ erstellt ein ausdrücklich **privates Backup** mit Katalog, Bildern und `userdata.json`. Zur Wiederherstellung dieses Backup importieren und „Persönlichen Fortschritt aus dieser Datei übernehmen“ aktivieren. Ein gewöhnlicher Questlisten-Import verändert vorhandene Häkchen nicht. Zum direkten Sichern oder Umziehen den Tracker beenden und anschließend den vollständigen `data/`-Ordner kopieren. Ein regelmäßiges privates Backup empfiehlt sich.
 
 ## Quests und Filter
 
-- Quests anlegen, bearbeiten und mit Bestätigung löschen; mehrere Jagdziele mit Anzahl und eigener Monsterart (Normal, Tempered, Rasend, Archtempered).
+- Quests anlegen, bearbeiten und mit Bestätigung löschen; mehrere Jagdziele mit Anzahl, einem Monster aus der durchsuchbaren Icon-Liste und einem unabhängig gewählten Zustand (Normal, Tempered, Frenzy, Archtempered oder eigene Zustände).
 - Rang, Sterne (auch 11+), Jägerrangbeschränkung, mehrere Belohnungsarten als Tags, mehrere benannte Belohnungen mit eigener benötigter Anzahl als Freitext, Notizen und Bilder.
-- Suche nach Questname, Monster oder Belohnung; kombinierbare Filter für Fortschritt, Rang, Sterne, eigenen Jägerrang, Monster, Monsterart und Belohnungsarten. Belohnungsarten innerhalb der Auswahl werden mit ODER kombiniert; verschiedene Filtergruppen mit UND. Monster und Monsterart müssen auf dasselbe Jagdziel passen.
+- Suche nach Questname, Monster oder Belohnung; kombinierbare Filter für Fortschritt, Rang, Sterne, eigenen Jägerrang, Monster, Monsterzustand, Belohnungsarten, Gebiet, Questtyp und eigene Tags. Belohnungsarten innerhalb der Auswahl werden mit ODER kombiniert; verschiedene Filtergruppen mit UND. Monster und Zustand müssen auf dasselbe Jagdziel passen.
 - „Alle Belohnungen“ setzt automatisch „Erster Abschluss“. „Alle Belohnungen“ zurücknehmen lässt den Erstabschluss stehen. Wird der Erstabschluss zurückgenommen, wird auch „Alle Belohnungen“ zurückgenommen.
 - Auf den Questnamen klicken, um Details aufzuklappen; auf ein Bild klicken, um die Galerie zu öffnen. `/` fokussiert die Suche, Pfeiltasten wechseln Galeriebilder, Escape schließt Dialoge.
 - Sterne schlagen Low-Rank (1–3), High-Rank (4–10) oder Master-Rank (11+) vor. Diese Zuordnung ist eine editierbare Ausgangseinstellung, kein unveränderliches Spiellimit.
 
+## Stammdaten
+
+Über **+ Neu** eine Quest oder einen Eintrag für Monster, Monsterzustände, Ränge, Belohnungsarten, Gebiete, Questtypen und eigene Tags anlegen. Kleine Plusbuttons im Questeditor ergänzen die jeweilige Liste und wählen den neuen Eintrag direkt aus. Gebiete und Tags starten leer; Questtypen enthalten Jagd, Fang und Sammeln. Monster können eigene Icons erhalten. Ein Zustand bekommt eine frei wählbare Farbe per Farbwähler oder Hexcode. Die Icon-Umrandung verwendet exakt diese Farbe; Normal/ohne Zustand hat keine Border. Ausgangsfarben: Tempered `#7837FC`, Archtempered `#BE4233`, Frenzy `#1C0037`.
+
+**Stammdaten verwalten** bietet Suche, Bearbeiten und Zusammenführen pro Kategorie. Umbenennen aktualisiert alle zugeordneten Quests, während IDs und Fortschritt erhalten bleiben. Zusammenführen übernimmt die Zuordnungen in den beibehaltenen Eintrag; alte Namen und IDs bleiben für spätere Imports bekannt. Normal bleibt als neutraler Zustand erhalten. Ränge können einen optionalen Sternbereich für den automatischen Vorschlag bekommen.
+
+Beim ersten Start mit einer bestehenden Version-1-Datenbank entsteht vor der Migration eine Sicherung unter `data/migration-backup-v1/quests.sqlite`. Die Nutzerdatenbank bleibt getrennt; Quests und Häkchen bleiben erhalten.
+
 ## Import und Updates
+
+Neue Stammdaten und alle Icons werden aus einer Questliste ergänzt. Vorhandene lokale Namen und Farben bleiben standardmäßig erhalten. **Vorhandene Stammdaten aus der ZIP aktualisieren** übernimmt auch diese Einstellungen und mitgelieferte Zusammenführungen. Version-1-Questlisten und Notion-Exports bleiben importierbar.
 
 Über „Importieren“ Quest-ZIP, privates Backup oder einen Notion-CSV-ZIP-Export auswählen. Die Vorschau bietet für jeden Eintrag **aktualisieren**, **als separate Quest übernehmen** oder **überspringen** an. Nicht enthaltene Quests bleiben erhalten.
 
@@ -50,7 +60,7 @@ Quest-IDs sind UUIDs und ändern sich bei normalen Bearbeitungen nicht. Gleiche 
 
 Die Vorschau gilt 15 Minuten. Alle Questeinträge werden vor der Übernahme validiert. Bilder werden vor dem Datenbank-Commit gespeichert; fehlende Bilder, ungültige IDs, doppelte ZIP-Pfade oder nicht unterstützte Versionen führen zum Abbruch. Grenzen: 120 MB ZIP-Upload, 250 MB entpackt, 1000 Quests, 20 MB pro Bild. Unterstützte Bilder: PNG, JPEG, GIF, WebP. Nicht mehr referenzierte Bilder werden auf der Festplatte behalten, aber nicht exportiert; so werden gemeinsam verwendete Bilder nicht versehentlich gelöscht.
 
-Notion-Markierungen: `§` und `$` → Tempered, `!` → Rasend, `[]` → Archtempered. `W.-` bleibt Bestandteil des Monsternamens. Originale Jagdzieltexte und spezifische Rüstkugelarten bleiben als Notizen erhalten; Schreibweisen und unbekannte Jagdziele werden nicht durch erfundene Daten ersetzt. Bei weiteren Notion-Importen wird vorhandener Fortschritt nur bei ausdrücklicher Auswahl der persönlichen Übernahme geändert.
+Notion-Markierungen: `§` und `$` → Tempered, `!` → Frenzy (ehemals Rasend), `[]` → Archtempered. Bekannte Schreibweisen wie `ReyDau` und `Rey-Dau` werden demselben Monster zugeordnet; `W.-` wird den entsprechenden Wächter-Monstern zugeordnet. Originale Jagdzieltexte und spezifische Rüstkugelarten bleiben als Notizen erhalten. Unbekannte Namen werden als neue Stammdaten übernommen. Bei weiteren Notion-Importen wird vorhandener Fortschritt nur bei ausdrücklicher Auswahl der persönlichen Übernahme geändert.
 
 Einmaliger Erstimport per Terminal: `python3 app.py --import-notion PFAD_ZUR_ZIP`. Dieser Befehl übernimmt auch die Häkchen und beendet sich anschließend. Bei möglichen Duplikaten die Oberfläche verwenden.
 
@@ -60,4 +70,4 @@ Einmaliger Erstimport per Terminal: `python3 app.py --import-notion PFAD_ZUR_ZIP
 
 `python3 tools/package_release.py` erstellt `dist/wilds-quest-tracker.zip` zum Weitergeben der gesamten Anwendung. Es enthält die Oberfläche, alle drei Starter und die öffentliche Startliste mit Bildern, aber keinen persönlichen Datenordner. Entpacken und den Starter für das jeweilige Betriebssystem nutzen.
 
-Das ZIP-Format ist versioniert (`mh-wilds-quests`, Version 1). Persönliche Daten sind gesondert versioniert (`mh-wilds-userdata`, Version 1). Keine externe API und kein Internetzugriff sind für den Betrieb erforderlich. Inoffizielles Fanprojekt; Monster Hunter ist eine Marke von Capcom.
+Das ZIP-Format ist versioniert (`mh-wilds-quests`, Version 2; Version 1 wird weiterhin eingelesen). Persönliche Daten sind gesondert versioniert (`mh-wilds-userdata`, Version 1). Keine externe API und kein Internetzugriff sind für den Betrieb erforderlich. `tools/fetch_monsters.py` lädt die Wiki-Icons bei Bedarf erneut und braucht dazu Internetzugriff; die ausgelieferte Anwendung enthält sie bereits. Inoffizielles Fanprojekt; Monster Hunter ist eine Marke von Capcom.

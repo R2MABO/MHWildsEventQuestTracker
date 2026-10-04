@@ -1,0 +1,304 @@
+[
+  {
+    "id": "b0a601bb-7a2c-5611-ba62-4329aa8f3a53",
+    "kind": "monster",
+    "name": "Ajarakan",
+    "icon": "2324f9098078f7b254e1c796c16f7ca85fd1cfa7d58cce02c7cfc470e1481830.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Ajarakan_Icon.webp"
+  },
+  {
+    "id": "d3900e80-a69b-513a-a77b-87e5009bda78",
+    "kind": "monster",
+    "name": "Alpha-Doshaguma",
+    "icon": "f5bf66e4eec00d01ddc23bcd0998c78082f1006120bd6c49d49fdbfe7c7c6834.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Alpha_Doshaguma_Icon.webp"
+  },
+  {
+    "id": "9bff20c4-9bc0-5b90-8f3e-8a9afc549216",
+    "kind": "monster",
+    "name": "Arkveld",
+    "icon": "459de17d58147f9afa5c7b2f7b3b5afae8b2af2a8871f2e2c7e4f35db0a4f2d6.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Arkveld_Icon.webp"
+  },
+  {
+    "id": "8fbe4340-d790-52f0-9178-b7f728246813",
+    "kind": "monster",
+    "name": "Balahara",
+    "icon": "0b5fab300920dc28f892338037b1e198e21d516aea3e16affc597bbbc1a4b2f4.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Balahara_Icon.webp"
+  },
+  {
+    "id": "74c058e1-7ac5-5fe5-91b0-bd351749e59e",
+    "kind": "monster",
+    "name": "Blangonga",
+    "icon": "9e552b442168d3684a17a7ef6ba5d87312d4053177a0377141946003ef058ddf.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Blangonga_Icon.webp"
+  },
+  {
+    "id": "e47363b7-b4e0-5921-8034-63ceb4c89657",
+    "kind": "monster",
+    "name": "Chatacabra",
+    "icon": "852d32fe82d378f85db089c113bdbba4055da3e9d302b9789e4a768ee37466d2.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Chatacabra_Icon.webp"
+  },
+  {
+    "id": "93dd586f-a565-5cff-a02d-78ec97877b9c",
+    "kind": "monster",
+    "name": "Congalala",
+    "icon": "6855426b8c790c27d4c3f788b15337b3cf1baa7a603a354f80150b3019f0dc2f.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Congalala_Icon.webp"
+  },
+  {
+    "id": "18583940-876c-5203-b14b-91de086622b5",
+    "kind": "monster",
+    "name": "Doshaguma",
+    "icon": "ca3f360a13bff8afa677ad00cc6c0a42d3253aca03cc67a55ce18af081f8d64f.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Doshaguma_Icon.webp"
+  },
+  {
+    "id": "7191070b-92ed-50e3-b98b-6c7568d63438",
+    "kind": "monster",
+    "name": "Gogmazios",
+    "icon": "5d71068f0bf0f8703c3c1c93ab7a9e827b287c0497daf6ec366f70b64e3c0b39.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Gogmazios_Icon.webp"
+  },
+  {
+    "id": "9662424f-af27-5184-b05a-0016e75699c1",
+    "kind": "monster",
+    "name": "Gore Magala",
+    "icon": "208b33fc9e014ee9fbe038eb927abb855b2dd9a2178c876bd2105f8ed0a9500a.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Gore_Magala_Icon.webp"
+  },
+  {
+    "id": "1a8af20b-3f21-5d71-8aa4-43bb434fd424",
+    "kind": "monster",
+    "name": "Gravios",
+    "icon": "23972e0d1cb060be5d83069e50fe3fc3ac7f35f084007ac8b58584fda1adcad7.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Gravios_Icon.webp"
+  },
+  {
+    "id": "70090a84-0081-5d98-a3c2-1f97867ff306",
+    "kind": "monster",
+    "name": "Wächter-Arkveld",
+    "icon": "36808bf0ced6584100e31cbcc7fd7617a97dfffe33082e9cfaf81be07c7a989d.webp",
+    "aliases": [
+      "W.-Arkveld"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Guardian_Arkveld_Icon.webp"
+  },
+  {
+    "id": "2203e780-924b-596c-96a4-301696f34661",
+    "kind": "monster",
+    "name": "Wächter-Doshaguma",
+    "icon": "e251ae024c62507ab2b9e95b43869dfb069abf99821cd6f358a6bbcfb40b5954.webp",
+    "aliases": [
+      "W.-Doshaguma"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Guardian_Doshaguma_Icon.webp"
+  },
+  {
+    "id": "a8d689f9-26ce-510d-88bb-f11b7c21ca26",
+    "kind": "monster",
+    "name": "Wächter-Vulkan-Odogaron",
+    "icon": "d0aefc464b45718df47552833cecb88166e703524f6dc052899f4f2af53612e9.webp",
+    "aliases": [
+      "W.-Vulkan-Odogaron"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Guardian_Ebony_Odogaron_Icon.webp"
+  },
+  {
+    "id": "df238d96-b2f2-5c22-8956-5fb34ef4c0bd",
+    "kind": "monster",
+    "name": "Wächter-Fulgur-Anjanath",
+    "icon": "d01fc44622dd2921cb3f2d06301f2d9e87d7471cb2a80332299aeb7bb4b0be4c.webp",
+    "aliases": [
+      "W.-Fulgur-Anjanath"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Guardian_Fulgur_Anjanath_Icon.webp"
+  },
+  {
+    "id": "0939cd70-ed8f-5658-99d4-c251f162d4ac",
+    "kind": "monster",
+    "name": "Wächter-Rathalos",
+    "icon": "2fcf0db9a0a308c8ab9f4403169e32e20cf1e0c02017c0345368415fa3e3555b.webp",
+    "aliases": [
+      "W.-Rathalos"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Guardian_Rathalos_Icon.webp"
+  },
+  {
+    "id": "07e86404-f07b-5343-99fd-8fd94d5ed37b",
+    "kind": "monster",
+    "name": "Gypceros",
+    "icon": "791eb837910b0db67173ad06a0d7829aa0bb5b9d3b6b28ae417a4e0a5a15e340.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Gypceros_Icon.webp"
+  },
+  {
+    "id": "c02d3946-9d04-5119-b8fa-eb151510b4ac",
+    "kind": "monster",
+    "name": "Hirabami",
+    "icon": "ebf092215310ee0df16289f2d4803d5e2e1350c674cdbbcb6577b2f4b1b1c1ef.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Hirabami_Icon.webp"
+  },
+  {
+    "id": "17a50f67-c6dc-58ad-ba91-c84eb16a1ba6",
+    "kind": "monster",
+    "name": "Jin-Dahaad",
+    "icon": "9edde2367722d63cf53d8413ed71eec5fa70dd6b700049987272afd5ace59347.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Jin_Dahaad_Icon.webp"
+  },
+  {
+    "id": "d78934ac-ada8-584e-b5f0-87c487194e14",
+    "kind": "monster",
+    "name": "Lagiacrus",
+    "icon": "dcb70fb160d748300b7393ae5668ffb519404ea56b3cbc6dc8461adb1368f6b6.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Lagiacrus_Icon.webp"
+  },
+  {
+    "id": "a58a300a-a1df-560a-96f5-c3d37890d27a",
+    "kind": "monster",
+    "name": "Lala-Barina",
+    "icon": "f4fa9934f18e784e029cfed32fffbf7a63eaa251eb4862f77a255891f884fd1e.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Lala_Barina_Icon.webp"
+  },
+  {
+    "id": "4f7ce42c-64d2-512b-add6-c1dff9c4ea9b",
+    "kind": "monster",
+    "name": "Mizutsune",
+    "icon": "0c8ea81bb0a4d37a0c044f5e7d2f6489ec5560c339b94c4461e55d3e7914c5ba.webp",
+    "aliases": [
+      "Misutsune"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Mizutsune_Icon.webp"
+  },
+  {
+    "id": "8f32f953-43bd-5f24-be6c-1bec50f901f5",
+    "kind": "monster",
+    "name": "Nerscylla",
+    "icon": "fb304fb092fd7aee167abf3370506231994e1aa97db5fe0fe6c3301ac4cb939e.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Nerscylla_Icon.webp"
+  },
+  {
+    "id": "852db08c-f248-57ef-af75-01f67359b7b1",
+    "kind": "monster",
+    "name": "Nu-Udra",
+    "icon": "9fdc3594a63d2c03c4cbcd32a1a34427e59d6308412b38661e2ecbbac26bc112.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Nu_Udra_Icon.webp"
+  },
+  {
+    "id": "2255815e-002d-5b91-9a75-6d9675040ec4",
+    "kind": "monster",
+    "name": "Omega Planetes",
+    "icon": "8e645e314e2c46b0840936e92fc14c80d7a9106d4633923d4ce06e544fd31915.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Omega_Planetes_Icon.webp"
+  },
+  {
+    "id": "b8b00d47-8113-54b4-96d8-5189cf84d902",
+    "kind": "monster",
+    "name": "Quematrice",
+    "icon": "b6a938e37ddbb6a0a967c32004439cd2b25d187adb65b9fb91a1e09d687662dc.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Quematrice_Icon.webp"
+  },
+  {
+    "id": "ea7737b8-0fe7-58ba-9f91-c4d7096e9b56",
+    "kind": "monster",
+    "name": "Rathalos",
+    "icon": "4b8461ac39e73e174045db8fdbc5a8ca4592ca2a05881b47568ffdb5edb076a5.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Rathalos_Icon.webp"
+  },
+  {
+    "id": "18ae6427-0ba6-5f57-ab1d-4cd43ae1affd",
+    "kind": "monster",
+    "name": "Rathian",
+    "icon": "b5b2a95b20c6bd4275cf808f383d81cfa241f9c7d5f57ceef781845abda065bf.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Rathian_Icon.webp"
+  },
+  {
+    "id": "8c9f8d36-882c-5177-b98e-39aa7c69b2a3",
+    "kind": "monster",
+    "name": "Rey-Dau",
+    "icon": "16b36ba8c63bff671d241cf14a64abe725112003a7f1bb42dfdaecf7c0ceb439.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Rey_Dau_Icon.webp"
+  },
+  {
+    "id": "b3089dce-4319-504e-8efb-bfe139281c09",
+    "kind": "monster",
+    "name": "Rompopolo",
+    "icon": "f89ae178ced339750e1dfad4144172178fe27e5d6eae3234f7e1bd35a794f077.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Rompopolo_Icon.webp"
+  },
+  {
+    "id": "4048da98-e19f-501b-bc3d-309da83df227",
+    "kind": "monster",
+    "name": "Seregios",
+    "icon": "035a6bd57340cd65ac240180195f3a79e9c7f2cab4678be3772c2033a74eb3e2.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Seregios_Icon.webp"
+  },
+  {
+    "id": "e7e51f06-0a14-50a5-889a-61096b990a10",
+    "kind": "monster",
+    "name": "Uth-Duna",
+    "icon": "79fa42725bd0f253445a9abac2b4019eda417c301610d99f9ccb00a7be8ae817.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Uth_Duna_Icon.webp"
+  },
+  {
+    "id": "04a4b068-bca1-5bd5-bd6e-3aa82af13ef4",
+    "kind": "monster",
+    "name": "Xu-Wu",
+    "icon": "b1c99bb13b9b64b25e5074f27b0f1422c8a5ff4666bf92544eb622b6aaa06564.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Xu_Wu_Icon.webp"
+  },
+  {
+    "id": "bd218626-29ad-5992-87d2-f97cda1b6402",
+    "kind": "monster",
+    "name": "Yian Kut-Ku",
+    "icon": "2cabdafba32c4b94f6e923ae10094729e82b75ad20cb0fcf063c483e18168351.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Yian_Kut-Ku_Icon.webp"
+  },
+  {
+    "id": "a0aa42f5-504c-5df4-927a-f4921a7ef1fc",
+    "kind": "monster",
+    "name": "Zoh Shia",
+    "icon": "4ae2f836a2ac493b80872517f7e1d69bd50de5e5bef6083dfc43e723499ad6d4.webp",
+    "aliases": [],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Zoh_Shia_Icon.webp"
+  },
+  {
+    "id": "cd4e2b6a-ab94-5ce4-983a-0d62b8f0854a",
+    "kind": "monster",
+    "name": "Unbekannt",
+    "icon": "51eebaaaccb2cdc8ee0e4928a3243549d4253e73f482f7a5cd1cb53fa18928fd.png",
+    "aliases": [
+      "?????"
+    ],
+    "source": "https://monsterhunterwiki.org/wiki/File:MHWA-Question_Mark_Icon.png"
+  }
+]

@@ -53,13 +53,15 @@ class TrackerTests(unittest.TestCase):
         with self.tracker.connect() as db:
             db.execute('INSERT INTO personal.aliases VALUES (?,?)', (str(uuid.uuid4()), q['id']))
         with zipfile.ZipFile(io.BytesIO(self.tracker.export())) as zf:
-            self.assertEqual(zf.namelist(), ['catalog.json'])
+            self.assertIn('catalog.json', zf.namelist())
+            self.assertNotIn('userdata.json', zf.namelist())
             raw = json.loads(zf.read('catalog.json'))
         self.assertNotIn('progress', raw['quests'][0])
         self.assertNotIn('first_clear', json.dumps(raw))
         with closing(sqlite3.connect(Path(self.temporary.name) / 'quests.sqlite')) as db:
             names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertEqual(names, {'quests'})
+        self.assertIn('quests', names)
+        self.assertFalse({'progress', 'aliases'} & names)
 
     def test_completion_invariant(self):
         q = self.add()
@@ -170,11 +172,16 @@ class TrackerTests(unittest.TestCase):
         q = quest()
         q['stars'] = 15
         q['rank'] = 'Master-Rank'
+        self.tracker.save_catalog({'kind':'monster', 'name':'Neues Monster'}, True)
         q['targets'].append({'monster': 'Neues Monster', 'type': 'Rasend', 'count': 4})
         q['rewards'].append({'name': 'Anhänger', 'required': '7x für jeden Anhänger'})
         self.add(q)
         parsed = parse_package(self.tracker.export())
-        self.assertEqual(parsed['quests'][0], q)
+        actual = self.tracker.state()['quests'][0]
+        actual.pop('progress')
+        self.assertEqual(parsed['quests'][0], actual)
+        self.assertEqual(actual['targets'][1]['type'], 'Frenzy')
+        self.assertEqual(actual['rewards'], q['rewards'])
 
     def test_invalid_quest_never_written(self):
         q = quest()
@@ -201,7 +208,7 @@ class TrackerTests(unittest.TestCase):
             zf.writestr('Eventquests_all.csv', csv_data.encode('utf-8'))
         parsed = parse_package(output.getvalue())
         q = parsed['quests'][0]
-        self.assertEqual([t['type'] for t in q['targets']], ['Tempered', 'Rasend', 'Archtempered', 'Tempered'])
+        self.assertEqual([t['type'] for t in q['targets']], ['Tempered', 'Frenzy', 'Archtempered', 'Tempered'])
         self.assertEqual(q['targets'][0]['count'], 3)
         self.assertEqual(q['rewards'][0]['required'], '13+')
         self.assertNotIn('progress', q)

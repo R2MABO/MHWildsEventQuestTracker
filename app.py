@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import difflib
 import hashlib
 import io
@@ -23,10 +23,11 @@ from urllib.parse import urlsplit, unquote
 import uuid
 import webbrowser
 import zipfile
+import catalogs
 
 ROOT = Path(__file__).resolve().parent
 REWARD_TYPES = ["Ausrüstung", "Materialien", "Artian Material", "Rüstkugeln", "Dekorationen", "Jägerrang XP", "Kochzutaten"]
-MONSTER_TYPES = ["Normal", "Tempered", "Rasend", "Archtempered"]
+MONSTER_TYPES = ["Normal", "Tempered", "Frenzy", "Archtempered"]
 RANKS = ["Low-Rank", "High-Rank", "Master-Rank"]
 MAX_BODY = 120 * 1024 * 1024
 MAX_IMAGE = 20 * 1024 * 1024
@@ -90,24 +91,25 @@ def validate_quest(raw):
     quest = {
         "id": identifier(raw.get("id")),
         "name": text_value(raw.get("name"), "Questname", 300, True),
-        "rank": raw.get("rank"),
+        "rank": text_value(raw.get("rank"), "Rang", 200, True),
         "hr": integer(raw.get("hr"), "Jägerrang", maximum=99999, nullable=True),
         "stars": integer(raw.get("stars"), "Sterne", 1),
         "notes": text_value(raw.get("notes", ""), "Notizen", 4000),
     }
-    if quest["rank"] not in RANKS:
-        raise ValidationError("Ungültiger Rang.")
     targets = raw.get("targets")
     if not isinstance(targets, list) or not 1 <= len(targets) <= 30:
         raise ValidationError("Mindestens ein Jagdziel angeben (höchstens 30).")
     quest["targets"] = []
     for target in targets:
-        if not isinstance(target, dict) or target.get("type") not in MONSTER_TYPES:
+        if not isinstance(target, dict):
             raise ValidationError("Ungültige Monsterart.")
         quest["targets"].append({"monster": text_value(target.get("monster"), "Monster", 200, True),
-                                 "type": target["type"], "count": integer(target.get("count", 1), "Monsteranzahl", 1, 100)})
+                                 "type": text_value(target.get("type"), "Monsterzustand", 200, True), "count": integer(target.get("count", 1), "Monsteranzahl", 1, 100)})
+        for field in ("monster_id", "type_id"):
+            if target.get(field) is not None:
+                quest["targets"][-1][field] = identifier(target[field])
     types = raw.get("reward_types", [])
-    if not isinstance(types, list) or len(types) > len(REWARD_TYPES) or any(t not in REWARD_TYPES for t in types):
+    if not isinstance(types, list) or len(types) > 100 or any(not isinstance(t, str) or not t.strip() or len(t) > 200 for t in types):
         raise ValidationError("Ungültige Belohnungsart.")
     quest["reward_types"] = list(dict.fromkeys(types))
     rewards = raw.get("rewards", [])
@@ -123,6 +125,22 @@ def validate_quest(raw):
     if not isinstance(images, list) or len(images) > 50 or any(not isinstance(i, str) or not re.fullmatch(r"[a-f0-9]{64}\.(png|jpg|gif|webp)", i) for i in images):
         raise ValidationError("Ungültige Bildreferenz.")
     quest["images"] = list(dict.fromkeys(images))
+    for field in ("area", "quest_type"):
+        quest[field] = text_value(raw.get(field, ""), field, 200)
+    tags = raw.get("tags", [])
+    if not isinstance(tags, list) or len(tags) > 100:
+        raise ValidationError("Ungültige Tags.")
+    quest["tags"] = list(dict.fromkeys(text_value(t, "Tag", 200, True) for t in tags))
+    for field in ("rank_id", "area_id", "quest_type_id"):
+        if raw.get(field) is not None:
+            quest[field] = identifier(raw[field])
+        elif field != 'rank_id':
+            quest[field] = None
+    for field in ("reward_type_ids", "tag_ids"):
+        if field in raw:
+            if not isinstance(raw[field], list) or len(raw[field]) > 100:
+                raise ValidationError("Ungültige Stammdaten-Referenzen.")
+            quest[field] = [identifier(i) for i in raw[field]]
     # Whitelist intentionally excludes completion flags and other user data.
     return quest
 
@@ -156,7 +174,7 @@ def parse_notion(zf):
             if match:
                 count, item = int(match[1]), item[match.end():]
             kind = "Normal"
-            for marker, mapped in [("[]", "Archtempered"), ("§", "Tempered"), ("$", "Tempered"), ("!", "Rasend")]:
+            for marker, mapped in [("[]", "Archtempered"), ("§", "Tempered"), ("$", "Tempered"), ("!", "Frenzy")]:
                 if item.startswith(marker):
                     kind, item = mapped, item[len(marker):]
                     break
@@ -187,7 +205,7 @@ def parse_notion(zf):
             quest["images"].append(key)
         quests.append(validate_quest(quest))
         progress[qid] = validate_progress({"first_clear": row.get("1. Abschluss") == "Yes", "all_rewards": row.get("Alle Belohnungen erhalten") == "Yes"})
-    return {"quests": quests, "images": images, "progress": progress, "aliases": {}, "source": "Notion", "warnings": warnings}
+    return {"quests": quests, "images": images, "progress": progress, "aliases": {}, "catalogs": [], "catalog_id_aliases": [], "source": "Notion", "warnings": warnings}
 
 
 def parse_package(content):
@@ -206,14 +224,33 @@ def parse_package(content):
                 parsed = parse_notion(zf)
             else:
                 raw = json.loads(zf.read("catalog.json").decode("utf-8"))
-                if not isinstance(raw, dict) or raw.get("format") != "mh-wilds-quests" or raw.get("version") != 1:
+                if not isinstance(raw, dict) or raw.get("format") != "mh-wilds-quests" or raw.get("version") not in (1, 2):
                     raise ValidationError("Unbekanntes Quest-ZIP-Format oder nicht unterstützte Version.")
                 quests = raw.get("quests")
                 if not isinstance(quests, list) or len(quests) > 1000:
                     raise ValidationError("Ungültige Questliste (maximal 1000 Quests).")
                 quests = [validate_quest(q) for q in quests]
+                records = raw.get("catalogs", [])
+                if not isinstance(records, list) or len(records) > 3000:
+                    raise ValidationError("Ungültige Stammdatenliste.")
+                records = [catalogs.validate_record(r) for r in records]
+                if len({r['id'] for r in records}) != len(records):
+                    raise ValidationError("Doppelte Stammdaten-IDs.")
+                id_aliases = raw.get("catalog_id_aliases", [])
+                if not isinstance(id_aliases, list) or len(id_aliases) > 10000:
+                    raise ValidationError("Ungültige Stammdaten-Zuordnungen.")
+                validated_aliases = []
+                records_by_id = {r['id']: r for r in records}
+                for alias in id_aliases:
+                    if not isinstance(alias, dict):
+                        raise ValidationError("Ungültige Stammdaten-Zuordnung.")
+                    foreign, target = identifier(alias.get('foreign_id')), identifier(alias.get('target_id'))
+                    if foreign in records_by_id or target not in records_by_id or records_by_id[target]['kind'] != alias.get('kind'):
+                        raise ValidationError("Stammdaten-Zuordnung verweist nicht auf einen gültigen Eintrag.")
+                    validated_aliases.append({'foreign_id': foreign, 'kind': alias['kind'], 'target_id': target})
                 images = {}
-                for key in {i for q in quests for i in q["images"]}:
+                asset_keys = {i for q in quests for i in q["images"]} | {r['icon'] for r in records if r.get('icon')}
+                for key in asset_keys:
                     path = f"images/{key}"
                     if path not in seen:
                         raise ValidationError(f"Bild {key} fehlt in der ZIP.")
@@ -230,7 +267,7 @@ def parse_package(content):
                         raise ValidationError("Ungültige Nutzerdaten im Backup.")
                     progress = {identifier(k): validate_progress(v) for k, v in private["progress"].items()}
                     aliases = {identifier(k): identifier(v) for k, v in private.get("aliases", {}).items()}
-                parsed = {"quests": quests, "images": images, "progress": progress, "aliases": aliases, "source": "Privates Backup" if "userdata.json" in seen else "Questliste", "warnings": []}
+                parsed = {"quests": quests, "images": images, "progress": progress, "aliases": aliases, "catalogs": records, "catalog_id_aliases": validated_aliases, "source": "Privates Backup" if "userdata.json" in seen else "Questliste", "warnings": []}
             ids = [q["id"] for q in parsed["quests"]]
             if len(ids) > 1000 or len(ids) != len(set(ids)):
                 raise ValidationError("Die Questliste enthält zu viele Quests oder doppelte IDs.")
@@ -251,11 +288,34 @@ class Tracker:
         self.lock = threading.RLock()
         self.previews = {}
         with self.connect() as db:
+            version = db.execute("PRAGMA main.user_version").fetchone()[0]
+            if version > 2:
+                raise ValidationError("Die Datenbank stammt aus einer neueren Tracker-Version.")
+            if version == 1:
+                backup_dir = self.directory / "migration-backup-v1"
+                backup_dir.mkdir(exist_ok=True)
+                if not (backup_dir / 'quests.sqlite').exists():
+                    with closing(sqlite3.connect(backup_dir / 'quests.sqlite')) as backup:
+                        db.backup(backup)
             db.execute("CREATE TABLE IF NOT EXISTS quests (id TEXT PRIMARY KEY, name TEXT NOT NULL, data TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS personal.progress (quest_id TEXT PRIMARY KEY, first_clear INTEGER NOT NULL, all_rewards INTEGER NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS personal.aliases (foreign_id TEXT PRIMARY KEY, quest_id TEXT NOT NULL)")
-            db.execute("PRAGMA main.user_version = 1")
-            db.execute("PRAGMA personal.user_version = 1")
+            catalogs.create_schema(db)
+            if version < 2:
+                catalogs.import_records(db, catalogs.defaults())
+                seed_monsters = ROOT / 'seed' / 'monsters.json'
+                if seed_monsters.exists():
+                    records = json.loads(seed_monsters.read_text(encoding='utf-8'))
+                    for record in records:
+                        if record.get('icon'):
+                            self.save_image((ROOT / 'seed' / 'icons' / record['icon']).read_bytes())
+                    catalogs.import_records(db, records)
+                for qid, raw in db.execute('SELECT id,data FROM quests').fetchall():
+                    q = catalogs.resolve_quest(db, validate_quest(json.loads(raw)), True)
+                    db.execute('UPDATE quests SET data=? WHERE id=?', (json.dumps(q, ensure_ascii=False), qid))
+            db.execute("PRAGMA main.user_version = 2")
+            if db.execute('PRAGMA personal.user_version').fetchone()[0] != 1:
+                db.execute("PRAGMA personal.user_version = 1")
 
     @contextmanager
     def connect(self):
@@ -273,7 +333,9 @@ class Tracker:
             quests = [json.loads(r[0]) for r in db.execute("SELECT data FROM quests ORDER BY rowid")]
             for q in quests:
                 q["progress"] = states.get(q["id"], {"first_clear": False, "all_rewards": False})
-            return {"quests": quests, "reward_types": REWARD_TYPES, "monster_types": MONSTER_TYPES, "ranks": RANKS}
+            groups = catalogs.grouped(db)
+            return {"quests": quests, "catalogs": groups, "reward_types": [r['name'] for r in groups['reward_type']],
+                    "monster_types": [r['name'] for r in groups['state']], "ranks": [r['name'] for r in groups['rank']]}
 
     def save_image(self, content):
         key = image_key(content)
@@ -291,6 +353,7 @@ class Tracker:
     def save_quest(self, raw, create=False):
         q = validate_quest(raw)
         with self.lock, self.connect() as db:
+            q = catalogs.resolve_quest(db, q)
             exists = db.execute("SELECT 1 FROM quests WHERE id = ?", (q["id"],)).fetchone()
             if create == bool(exists):
                 raise ValidationError("Quest-ID existiert bereits." if create else "Quest wurde nicht gefunden.")
@@ -317,10 +380,12 @@ class Tracker:
     def export(self, private=False):
         with self.lock, self.connect() as db:
             quests = [validate_quest(json.loads(r[0])) for r in db.execute("SELECT data FROM quests ORDER BY rowid")]
+            records = catalogs.all_records(db)
+            id_aliases = [{'foreign_id': row[0], 'kind': row[1], 'target_id': row[2]} for row in db.execute('SELECT * FROM catalog_id_aliases')]
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr("catalog.json", json.dumps({"format": "mh-wilds-quests", "version": 1, "quests": quests}, ensure_ascii=False, indent=2))
-                for key in sorted({i for q in quests for i in q["images"]}):
+                zf.writestr("catalog.json", json.dumps({"format": "mh-wilds-quests", "version": 2, "quests": quests, "catalogs": records, "catalog_id_aliases": id_aliases}, ensure_ascii=False, indent=2))
+                for key in sorted({i for q in quests for i in q["images"]} | {r['icon'] for r in records if r.get('icon')}):
                     path = self.images / key
                     if not path.is_file():
                         raise ValidationError("Ein Bild fehlt. Export wurde abgebrochen.")
@@ -360,9 +425,9 @@ class Tracker:
                 self.previews.pop(next(iter(self.previews)))
             token = secrets.token_urlsafe(24)
             self.previews[token] = (now, package, rows)
-            return {"token": token, "source": package["source"], "has_progress": bool(package["progress"]), "rows": rows, "warnings": package["warnings"]}
+            return {"token": token, "source": package["source"], "has_progress": bool(package["progress"]), "catalog_count": len(package['catalogs']), "rows": rows, "warnings": package["warnings"]}
 
-    def commit(self, token, choices, restore_progress=False):
+    def commit(self, token, choices, restore_progress=False, update_catalogs=False):
         with self.lock:
             pending = self.previews.get(token)
             if pending is None or time.monotonic() - pending[0] > 900:
@@ -398,9 +463,19 @@ class Tracker:
                     q["id"] = local_id
                     operations.append((foreign_id, q, choice))
                 # Images are content-addressed; writing them first avoids DB references to absent files.
-                for key in {i for _, q, _ in operations for i in q["images"]}:
+                for key in {i for _, q, _ in operations for i in q["images"]} | {r['icon'] for r in package['catalogs'] if r.get('icon')}:
                     self.save_image(package["images"][key])
+                catalogs.import_records(db, package['catalogs'], update_catalogs)
+                for alias in package['catalog_id_aliases']:
+                    target = catalogs.find(db, alias['kind'], qid=alias['target_id'])
+                    known = catalogs.find(db, alias['kind'], qid=alias['foreign_id'])
+                    if target and known and target['id'] != known['id'] and update_catalogs:
+                        catalogs.merge(db, known['id'], target['id'])
+                    if target and not known:
+                        db.execute('INSERT OR REPLACE INTO catalog_id_aliases VALUES (?,?,?)', (alias['foreign_id'], alias['kind'], target['id']))
+                catalogs.refresh_quests(db)
                 for foreign_id, q, choice in operations:
+                    q = catalogs.resolve_quest(db, q, True)
                     db.execute("INSERT INTO quests VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,data=excluded.data", (q["id"], q["name"], json.dumps(q, ensure_ascii=False)))
                     if choice.startswith("update:") and foreign_id != q["id"]:
                         db.execute("INSERT OR REPLACE INTO personal.aliases VALUES (?,?)", (foreign_id, q["id"]))
@@ -414,6 +489,30 @@ class Tracker:
                             db.execute("INSERT OR REPLACE INTO personal.aliases VALUES (?,?)", (foreign_id, local_id))
             del self.previews[token]
             return counts
+
+    def save_catalog(self, raw, create=False):
+        raw = dict(raw)
+        if create:
+            raw['id'] = str(uuid.uuid4())
+        record = catalogs.validate_record(raw)
+        with self.lock, self.connect() as db:
+            current = catalogs.find(db, record['kind'], qid=record['id'])
+            if not create and not current:
+                raise ValidationError('Stammdateneintrag wurde nicht gefunden.')
+            if current:
+                if current.get('is_none') and record['name'] != current['name']:
+                    raise ValidationError('Normal/ohne Zustand bleibt als neutraler Zustand erhalten.')
+                record['aliases'] = list(dict.fromkeys([*current['aliases'], *record['aliases'], *([current['name']] if catalogs.norm(current['name']) != catalogs.norm(record['name']) else [])]))
+            if record.get('icon') and not (self.images / record['icon']).is_file():
+                raise ValidationError('Das ausgewählte Monster-Icon fehlt.')
+            result = catalogs.write_record(db, record)
+            catalogs.refresh_quests(db)
+            return result
+
+    def merge_catalog(self, source_id, target_id):
+        with self.lock, self.connect() as db:
+            catalogs.merge(db, identifier(source_id), identifier(target_id))
+        return {'ok': True}
 
 
 def make_handler(tracker, csrf):
@@ -502,6 +601,10 @@ def make_handler(tracker, csrf):
                 self.send(200, {"ok": True})
             elif path == "/api/progress":
                 self.send(200, tracker.set_progress(raw.get("id"), raw.get("progress")))
+            elif path in ("/api/catalog/create", "/api/catalog/save"):
+                self.send(200, tracker.save_catalog(raw, path.endswith('create')))
+            elif path == "/api/catalog/merge":
+                self.send(200, tracker.merge_catalog(raw.get('source_id'), raw.get('target_id')))
             elif path == "/api/image":
                 data = raw.get("data")
                 if not isinstance(data, str) or len(data) > MAX_IMAGE * 1.4:
@@ -513,9 +616,10 @@ def make_handler(tracker, csrf):
                 self.send(200, {"key": tracker.save_image(blob)})
             elif path == "/api/import/commit":
                 restore = raw.get("restore_progress", False)
-                if not isinstance(restore, bool):
+                update_catalogs = raw.get('update_catalogs', False)
+                if not isinstance(restore, bool) or not isinstance(update_catalogs, bool):
                     raise ValidationError("Ungültige Backup-Option.")
-                self.send(200, tracker.commit(raw.get("token"), raw.get("choices"), restore))
+                self.send(200, tracker.commit(raw.get("token"), raw.get("choices"), restore, update_catalogs))
             else:
                 self.send(404, {"error": "Nicht gefunden."})
 
