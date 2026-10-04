@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local tracker data and development artifacts
+/data/
+/.test-artifacts/
+/.python-path
