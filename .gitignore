@@ -1,0 +1,6 @@
+data/
+__pycache__/
+*.pyc
+.test-artifacts/
+dist/
+.python-path

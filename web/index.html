@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tracker-token" content="__TRACKER_TOKEN__">
+  <meta name="description" content="Dein lokaler Tracker für Monster Hunter Wilds Eventquests.">
+  <title>Wilds · Quest Tracker</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar" aria-label="Questfilter">
+    <a class="brand" href="/" aria-label="Wilds Quest Tracker Startseite"><img src="/favicon.svg" alt="" width="42" height="42"><span>WILDS<small>QUEST TRACKER</small></span></a>
+    <div class="sidebar-heading"><span>JÄGERNOTIZEN</span><span class="local-dot">Lokal</span></div>
+    <div class="nav-current"><span data-icon="book"></span><strong>Eventquests</strong><span id="nav-count" class="badge">–</span></div>
+    <div class="filter-head"><h2>Filter</h2><button id="reset-filters" class="text-button" type="button">Zurücksetzen</button></div>
+    <label class="field-label" for="filter-status">Fortschritt</label>
+    <select id="filter-status"><option value="">Alle Quests</option><option value="open">Belohnungen offen</option><option value="uncleared">Noch nicht abgeschlossen</option><option value="cleared">Erster Abschluss erledigt</option><option value="complete">Alle Belohnungen erhalten</option></select>
+    <label class="field-label" for="filter-rank">Quest-Rang</label><select id="filter-rank"><option value="">Alle Ränge</option></select>
+    <div class="filter-pair"><div><label class="field-label" for="filter-stars">Sterne</label><select id="filter-stars"><option value="">Alle</option></select></div><div><label class="field-label" for="filter-hr">Mein Jägerrang</label><input id="filter-hr" type="number" min="0" max="99999" placeholder="Alle"></div></div>
+    <label class="field-label" for="filter-monster">Monster</label><select id="filter-monster"><option value="">Alle Monster</option></select>
+    <label class="field-label" for="filter-type">Monsterart</label><select id="filter-type"><option value="">Alle Arten</option></select>
+    <fieldset class="reward-filter"><legend>Belohnungsart</legend><div id="reward-filters" class="filter-tags"></div></fieldset>
+    <div class="sidebar-footer"><span data-icon="shield"></span><p>Deine Jagden bleiben bei dir.<small>Offline · Ohne Konto · SQLite</small></p></div>
+  </aside>
+
+  <main>
+    <header class="page-header"><div><div class="eyebrow">MONSTER HUNTER WILDS</div><h1>Eventquests<span class="title-dot">.</span></h1><p>Jagden planen. Belohnungen sammeln. Überblick behalten.</p></div><button id="new-quest" class="button primary"><span data-icon="plus"></span>Quest anlegen</button></header>
+    <section class="stats" aria-label="Dein Gesamtfortschritt">
+      <article class="stat-card"><span class="stat-icon" data-icon="book"></span><div><span class="stat-label">Im Questkatalog</span><div class="stat-number" id="stat-total">–</div><small>Eventquests für deine nächste Jagd</small></div></article>
+      <article class="stat-card"><span class="stat-icon" data-icon="flag"></span><div><span class="stat-label">Erster Abschluss</span><div class="stat-number" id="stat-clear">–</div><div class="progress-track"><div id="clear-bar"></div></div></div></article>
+      <article class="stat-card"><span class="stat-icon" data-icon="gem"></span><div><span class="stat-label">Alle Belohnungen</span><div class="stat-number" id="stat-rewards">–</div><div class="progress-track"><div id="rewards-bar"></div></div></div></article>
+    </section>
+    <section class="quest-panel" aria-label="Questliste">
+      <div class="panel-heading"><div class="panel-title"><h2>Questkatalog</h2><span id="result-count" class="muted">Wird geladen …</span></div><div class="file-actions"><button id="import-button" class="button subtle"><span data-icon="upload"></span>Importieren</button><button id="export-button" class="button subtle"><span data-icon="download"></span>Questliste teilen</button><button id="backup-button" class="icon-button" title="Privates Backup inklusive Fortschritt herunterladen" aria-label="Privates Backup herunterladen"><span data-icon="archive"></span></button></div></div>
+      <div class="list-toolbar"><div class="search-wrap"><span data-icon="search"></span><input id="search" type="search" placeholder="Quest, Monster oder Belohnung suchen …" aria-label="Quests durchsuchen"><kbd>/</kbd></div><label class="sort-label">Sortieren<select id="sort"><option value="original">Katalog-Reihenfolge</option><option value="name">Questname A–Z</option><option value="stars-desc">Sterne absteigend</option><option value="stars-asc">Sterne aufsteigend</option><option value="open">Offene Belohnungen zuerst</option><option value="hr">Jägerrang aufsteigend</option></select></label></div>
+      <div id="active-filters" class="active-filters" hidden></div>
+      <div class="table-head"><span>QUEST & JAGDZIEL</span><span>RANG</span><span>BELOHNUNG</span><span>DEIN FORTSCHRITT</span><span></span></div>
+      <div id="quest-list" class="quest-list" aria-live="polite"></div>
+      <div class="panel-footer"><span><span class="mini-dot"></span>Automatisch lokal gespeichert</span><span>Questliste und persönlicher Fortschritt sind getrennt.</span></div>
+    </section>
+    <footer class="page-footer">Für die nächste Jagd.<span>Inoffizieller, lokaler Fan-Tracker</span></footer>
+  </main>
+
+  <dialog id="editor" class="editor-dialog">
+    <form id="quest-form">
+      <div class="dialog-header"><div><div class="eyebrow">QUESTKATALOG</div><h2 id="editor-title">Quest anlegen</h2></div><button class="icon-button" type="button" data-close="editor" aria-label="Editor schließen"><span data-icon="close"></span></button></div>
+      <div class="dialog-body">
+        <label class="field-label" for="quest-name">Questname <span class="required">*</span></label><input id="quest-name" required maxlength="300" placeholder="Wie heißt die Quest?">
+        <div class="section-heading"><h3>Jagdziel(e)</h3><button type="button" id="add-target" class="text-button">+ Jagdziel hinzufügen</button></div><div id="target-rows"></div><datalist id="monster-suggestions"></datalist>
+        <div class="editor-grid"><div><label class="field-label" for="quest-stars">Sterne <span class="required">*</span></label><input id="quest-stars" type="number" min="1" max="10000" value="4" required></div><div><label class="field-label" for="quest-rank">Quest-Rang</label><select id="quest-rank"></select></div><div><label class="field-label" for="quest-hr">Jägerrang ab</label><input id="quest-hr" type="number" min="0" max="99999" placeholder="Keine Angabe"></div></div><p class="field-help">Der Rang wird beim Ändern der Sterne vorgeschlagen und kann frei angepasst werden. Auch 11+ Sterne sind möglich.</p>
+        <div class="section-heading"><h3>Belohnungsarten</h3><span class="muted">Mehrere auswählbar</span></div><div id="editor-reward-types" class="filter-tags"></div>
+        <div class="section-heading"><h3>Belohnungen</h3><button type="button" id="add-reward" class="text-button">+ Belohnung hinzufügen</button></div><div id="reward-rows"></div><p class="field-help">Benötigte Anzahl als Freitext, z. B. „13“, „13+“ oder „7 je Anhänger“.</p>
+        <div class="section-heading"><h3>Bilder</h3><label class="text-button file-label" for="image-input">+ Bilder anhängen</label><input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></div><div id="editor-images" class="editor-images"></div><p class="field-help">PNG, JPEG, WebP oder GIF · bis zu 20 MB pro Bild</p>
+        <label class="field-label" for="quest-notes">Notizen</label><textarea id="quest-notes" rows="3" maxlength="4000" placeholder="Optional: besondere Hinweise zur Quest"></textarea>
+      </div>
+      <div class="dialog-footer"><button id="delete-quest" class="button danger" type="button" hidden><span data-icon="trash"></span>Löschen</button><span class="spacer"></span><button class="button" type="button" data-close="editor">Abbrechen</button><button id="save-quest" class="button primary" type="submit">Quest speichern</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog" class="import-dialog">
+    <div class="dialog-header"><div><div class="eyebrow">QUESTLISTE AKTUALISIEREN</div><h2>Importvorschau</h2></div><button class="icon-button" data-close="import-dialog" aria-label="Import schließen"><span data-icon="close"></span></button></div>
+    <div class="dialog-body"><p id="import-summary"></p><p class="field-help">Gleiche IDs werden erkannt. Mögliche Duplikate bitte zuordnen; deine Entscheidung wird für spätere Updates gespeichert. Nicht enthaltene Quests bleiben erhalten.</p><div id="import-warnings" class="notice" hidden></div><label id="restore-option" class="restore-option" hidden><input id="restore-progress" type="checkbox"><span><strong>Persönlichen Fortschritt aus dieser Datei übernehmen</strong><small>Überschreibt die Häkchen der übernommenen Quests. Ohne Auswahl bleiben deine bisherigen Häkchen erhalten.</small></span></label><div class="import-bulk"><button class="text-button" id="import-new">Neue ohne Duplikat übernehmen</button><span id="import-counts" class="muted"></span></div><div id="import-rows"></div></div>
+    <div class="dialog-footer"><button class="button" data-close="import-dialog">Abbrechen</button><button id="commit-import" class="button primary">Auswahl importieren</button></div>
+  </dialog>
+
+  <dialog id="image-dialog" class="image-dialog"><div class="image-controls"><span id="image-caption"></span><div><button id="previous-image" class="icon-button" aria-label="Vorheriges Bild"><span data-icon="left"></span></button><span id="image-position"></span><button id="next-image" class="icon-button" aria-label="Nächstes Bild"><span data-icon="right"></span></button><button class="icon-button" data-close="image-dialog" aria-label="Bildansicht schließen"><span data-icon="close"></span></button></div></div><img id="large-image" alt="Belohnungsbild"></dialog>
+  <dialog id="confirm-dialog" class="confirm-dialog"><div class="dialog-header"><h2 id="confirm-title"></h2></div><div class="dialog-body"><p id="confirm-text"></p></div><div class="dialog-footer"><button id="confirm-cancel" class="button">Abbrechen</button><button id="confirm-ok" class="button primary">Bestätigen</button></div></dialog>
+  <input id="import-input" type="file" accept=".zip,application/zip" hidden>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="loading-overlay" class="loading-overlay" hidden><span class="spinner"></span><span id="loading-message">Wird verarbeitet …</span></div>
+</body>
+</html>
