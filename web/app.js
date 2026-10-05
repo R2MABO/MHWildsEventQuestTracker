@@ -1,5 +1,162 @@
 'use strict';
 
+// Apply the saved theme before loading quest data; initialize controls when the DOM is ready.
+(() => {
+  const storageKey = 'wilds-quest-tracker.theme.v1';
+  const presets = {
+    current: { base: '#151a17', accent: '#d8b779', secondary: '#95b897' },
+    dark: { base: '#11151e', accent: '#a7b9ff', secondary: '#65d6ba' },
+    light: { base: '#f4f2eb', accent: '#8a551b', secondary: '#32705a' },
+  };
+  const names = { current: 'Wilds Original', dark: 'Dark', light: 'Light', custom: 'Eigene Farben' };
+  const root = document.documentElement;
+  const validColor = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
+  const rgb = hex => [1, 3, 5].map(start => parseInt(hex.slice(start, start + 2), 16));
+  function mix(first, second, weight) {
+    const target = rgb(second);
+    return '#' + rgb(first).map((channel, index) => Math.round(channel * (1 - weight) + target[index] * weight).toString(16).padStart(2, '0')).join('');
+  }
+  function luminance(color) {
+    return rgb(color).map(channel => {
+      const value = channel / 255;
+      return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+    }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+  }
+  function contrast(first, second) {
+    const a = luminance(first), b = luminance(second);
+    return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+  }
+  function readable(color, background, minimum = 4.5) {
+    if (contrast(color, background) >= minimum) return color;
+    const end = contrast('#ffffff', background) > contrast('#101410', background) ? '#ffffff' : '#101410';
+    for (let step = 1; step <= 100; step++) {
+      const candidate = mix(color, end, step / 100);
+      if (contrast(candidate, background) >= minimum) return candidate;
+    }
+    return end;
+  }
+  function normalize(value) {
+    if (!value || !['base', 'accent', 'secondary'].every(key => validColor(value[key]))) return { ...presets.current, preset: 'current' };
+    const theme = Object.fromEntries(['base', 'accent', 'secondary'].map(key => [key, value[key].toLowerCase()]));
+    theme.preset = Object.keys(presets).find(name => Object.keys(theme).every(key => theme[key] === presets[name][key])) || 'custom';
+    return theme;
+  }
+  function palette(theme) {
+    const dark = luminance(theme.base) < .4;
+    const ink = dark ? '#ffffff' : '#101410';
+    const surface = mix(theme.base, ink, .035);
+    const raised = mix(theme.base, ink, .075);
+    // Text colors are checked against the brightest/darkest regular surface.
+    const text = readable(mix(theme.base, ink, .92), raised);
+    const muted = readable(mix(theme.base, ink, .59), raised);
+    const accent = readable(theme.accent, raised);
+    const secondary = readable(theme.secondary, raised);
+    return {
+      bg: theme.base, surface, raised, text, muted,
+      line: mix(theme.base, ink, .18), gold: accent, green: secondary,
+      'gold-dark': mix(theme.base, theme.accent, .1),
+      danger: readable(dark ? '#e5a097' : '#a33030', raised),
+      'input-bg': mix(theme.base, ink, .01), 'sidebar-bg': mix(theme.base, ink, .02),
+      'surface-soft': mix(theme.base, ink, .025), hover: mix(theme.base, ink, .11),
+      'strong-line': mix(theme.base, ink, .35), 'soft-line': mix(theme.base, ink, .14),
+      'secondary-text': muted, 'accent-soft': mix(theme.base, theme.accent, .13),
+      'accent-line': mix(theme.base, accent, .4), 'accent-text': accent,
+      'accent-hover': readable(mix(accent, ink, .14), raised),
+      'on-accent': contrast('#ffffff', accent) > contrast('#101410', accent) ? '#ffffff' : '#101410',
+      'success-soft': mix(theme.base, theme.secondary, .14), 'success-line': mix(theme.base, secondary, .35),
+      'success-text': secondary,
+      'violet-soft': mix(theme.base, '#9878c5', .14), 'violet-line': mix(theme.base, '#9878c5', .35),
+      'violet-text': readable('#bfb0d8', raised),
+      'blue-soft': mix(theme.base, '#459eae', .14), 'blue-line': mix(theme.base, '#459eae', .35),
+      'blue-text': readable('#9fbdc1', raised),
+      'danger-soft': mix(theme.base, '#ba6055', .14), 'danger-line': mix(theme.base, '#ba6055', .35),
+      'danger-text': readable('#e5a097', raised),
+    };
+  }
+  const themeProperties = Object.keys(palette(normalize(null)));
+  function apply(theme) {
+    themeProperties.forEach(key => root.style.removeProperty(`--${key}`));
+    if (theme.preset === 'current') root.style.removeProperty('color-scheme');
+    else {
+      Object.entries(palette(theme)).forEach(([key, value]) => root.style.setProperty(`--${key}`, value));
+      root.style.colorScheme = luminance(theme.base) < .4 ? 'dark' : 'light';
+    }
+    root.dataset.theme = theme.preset;
+  }
+  let saved = normalize(null);
+  try { saved = normalize(JSON.parse(localStorage.getItem(storageKey))); } catch { /* Storage may be disabled or contain invalid data. */ }
+  apply(saved);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const get = id => document.getElementById(id);
+    const dialog = get('theme-dialog');
+    let draft = { ...saved };
+    function sync() {
+      ['base', 'accent', 'secondary'].forEach(key => {
+        get(`theme-${key}`).value = draft[key];
+        get(`theme-${key}-hex`).value = draft[key];
+      });
+      preview();
+    }
+    function preview() {
+      draft = normalize(draft);
+      apply(draft);
+      get('theme-name').textContent = names[draft.preset];
+      document.querySelectorAll('[data-theme-preset]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.themePreset === draft.preset)));
+      const colors = palette(draft);
+      get('theme-shades').replaceChildren(...['bg', 'surface', 'raised', 'line', 'gold', 'green'].map(key => {
+        const swatch = document.createElement('span');
+        const color = getComputedStyle(root).getPropertyValue(`--${key}`).trim() || colors[key];
+        swatch.style.background = color;
+        swatch.style.color = contrast('#ffffff', color) > contrast('#101410', color) ? '#ffffff' : '#101410';
+        swatch.textContent = color.toUpperCase();
+        swatch.title = `${key}: ${color}`;
+        return swatch;
+      }));
+    }
+    get('open-theme').addEventListener('click', () => {
+      draft = { ...saved };
+      get('theme-storage-error').hidden = true;
+      sync();
+      dialog.showModal();
+    });
+    document.querySelectorAll('[data-theme-preset]').forEach(button => button.addEventListener('click', () => {
+      draft = normalize(presets[button.dataset.themePreset]);
+      sync();
+    }));
+    ['base', 'accent', 'secondary'].forEach(key => {
+      get(`theme-${key}`).addEventListener('input', event => {
+        draft[key] = event.target.value;
+        get(`theme-${key}-hex`).value = event.target.value;
+        preview();
+      });
+      get(`theme-${key}-hex`).addEventListener('input', event => {
+        if (!validColor(event.target.value)) return;
+        draft[key] = event.target.value;
+        get(`theme-${key}`).value = event.target.value;
+        preview();
+      });
+    });
+    get('theme-form').addEventListener('submit', event => {
+      event.preventDefault();
+      draft = normalize(draft);
+      try { localStorage.setItem(storageKey, JSON.stringify(draft)); }
+      catch {
+        get('theme-storage-error').textContent = 'Das Theme konnte nicht gespeichert werden. Bitte erlaube lokalen Browserspeicher. Die Vorschau bleibt bis zum Abbrechen aktiv.';
+        get('theme-storage-error').hidden = false;
+        return;
+      }
+      saved = { ...draft };
+      dialog.close();
+    });
+    ['theme-close', 'theme-cancel'].forEach(id => get(id).addEventListener('click', () => dialog.close()));
+    // Includes Escape and programmatic closes; saved changes are already committed.
+    dialog.addEventListener('close', () => apply(saved));
+  });
+})();
+
+'use strict';
+
 const $ = id => document.getElementById(id);
 const icons = {
   book: '<path d="M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-3H4zM20 4h-4a3 3 0 0 0-3 3v14a4 4 0 0 1 4-3h3z"/>',
@@ -45,6 +202,7 @@ function el(tag, attrs = {}, children = []) {
 }
 
 let state = { quests: [], reward_types: [], monster_types: [], ranks: [], catalogs: {} };
+const questSort = { column: null, direction: 1 };
 let editing = null;
 let draftImages = [];
 let importPreview = null;
@@ -53,7 +211,73 @@ let toastTimer;
 const expanded = new Set();
 const rewardFilter = new Set();
 const filterIds = ['filter-status', 'filter-rank', 'filter-stars', 'filter-hr', 'filter-monster', 'filter-type', 'filter-area', 'filter-quest-type', 'filter-tag'];
-const csrf = document.querySelector('meta[name="tracker-token"]').content;
+let csrf = document.querySelector('meta[name="tracker-token"]').content;
+let serverOnline = true;
+let checkingConnection = false;
+const offlineMessage = 'Server nicht erreichbar. Bearbeitung und Speichern sind gesperrt. Starte den Tracker erneut. Deine offenen Eingaben bleiben erhalten.';
+const serverControls = '#editor .dialog-body, #entity-dialog .dialog-body, #merge-dialog .dialog-body, #import-dialog .dialog-body, #save-quest, #delete-quest, #entity-save, #merge-save, #commit-import, #new-quest, #create-menu, #import-button, #export-button, #backup-button, #catalog-add, .catalog-actions, .status-cell, .quest-edit';
+function updateConnectionControls() {
+  document.querySelectorAll(serverControls).forEach(node => { node.inert = !serverOnline; });
+}
+function setServerOnline(online) {
+  serverOnline = online;
+  updateConnectionControls();
+  const notice = $('connection-notice');
+  if (online) {
+    if (notice.matches(':popover-open')) notice.hidePopover();
+    notice.hidden = true;
+  } else {
+    notice.hidden = false;
+    if (!notice.matches(':popover-open')) notice.showPopover();
+  }
+}
+async function checkConnection() {
+  if (checkingConnection) return;
+  checkingConnection = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const requestOptions = { signal: controller.signal, cache: 'no-store' };
+    let response = await fetch('/api/health', requestOptions);
+    let token = csrf;
+    if (response.status === 404) {
+      // A server started before an update may not have the health route yet.
+      response = await fetch('/api/state', requestOptions);
+      if (!response.ok || !Array.isArray((await response.json()).quests)) throw new Error('Ungültige Serverantwort');
+    } else {
+      if (!response.ok) throw new Error('Server nicht erreichbar');
+      const health = await response.json();
+      if (!health.ok || typeof health.token !== 'string') throw new Error('Ungültige Serverantwort');
+      token = health.token;
+    }
+    const changed = csrf !== token;
+    csrf = token;
+    if (changed) connectBrowserSession();
+    setServerOnline(true);
+  } catch {
+    setServerOnline(false);
+  } finally {
+    clearTimeout(timeout);
+    checkingConnection = false;
+  }
+}
+// A persistent connection also stays alive when background-tab timers are throttled.
+let browserSession;
+function connectBrowserSession() {
+  browserSession?.close();
+  browserSession = new EventSource(`/api/session?token=${encodeURIComponent(csrf)}`);
+  browserSession.addEventListener('open', () => setServerOnline(true));
+  browserSession.addEventListener('error', () => {
+    // A failed event stream alone does not mean that saving is unavailable.
+    return checkConnection();
+  });
+}
+connectBrowserSession();
+window.addEventListener('pagehide', () => browserSession.close());
+window.addEventListener('pageshow', event => { if (event.persisted) connectBrowserSession(); });
+window.addEventListener('focus', checkConnection);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkConnection(); });
+setInterval(checkConnection, 3000);
 const catalogLabels = { monster: 'Monster', state: 'Monsterzustand', rank: 'Rang', reward_type: 'Belohnungsart', area: 'Gebiet', quest_type: 'Questtyp', tag: 'Tag' };
 let entityEditing = null;
 let entityKind = 'monster';
@@ -84,6 +308,41 @@ function statePill(status) {
   pill.style.color = brightness > 150 ? '#142017' : '#ffffff';
   return pill;
 }
+function defaultRewardColor(name) {
+  const palette = {
+    'Ausrüstung': '#FFB938',
+    'Materialien': '#35C9EF',
+    'Artian Material': '#F15BBA',
+    'Rüstkugeln': '#FF7849',
+    'Dekorationen': '#A78BFA',
+    'Jägerrang XP': '#B8E64C',
+    'Kochzutaten': '#36D6A0',
+  };
+  const record = recordByName('reward_type', name);
+  const known = [record?.name, ...(record?.aliases || []), name].find(value => Object.hasOwn(palette, value));
+  if (known) return palette[known];
+  // Custom categories get a repeatable vivid color based on their stable identity.
+  const key = record?.id || name;
+  let hash = 0;
+  for (const character of key) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  const hue = hash % 360 / 60;
+  const channel = offset => {
+    const distance = (offset + hue) % 6;
+    return Math.round(255 * (.95 - .65 * Math.max(0, Math.min(distance, 4 - distance, 1)))).toString(16).padStart(2, '0');
+  };
+  return `#${channel(5)}${channel(3)}${channel(1)}`.toUpperCase();
+}
+function rewardColors(node, color) {
+  if (!/^#[0-9a-f]{6}$/i.test(color || '')) return;
+  const channels = [1, 3, 5].map(start => {
+    const value = parseInt(color.slice(start, start + 2), 16) / 255;
+    return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+  });
+  const luminance = channels.reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+  node.style.setProperty('--reward-color', color);
+  node.style.setProperty('--reward-ink', luminance > .179 ? '#000000' : '#ffffff');
+  node.classList.add('custom-reward-color');
+}
 
 function toast(message, error = false) {
   clearTimeout(toastTimer);
@@ -102,6 +361,7 @@ async function busy(message, fn) {
   try { return await fn(); } finally { $('loading-overlay').hidden = true; }
 }
 async function api(path, data, binary = false) {
+  if (data !== undefined && !serverOnline) throw new Error(offlineMessage);
   let response;
   try {
     response = await fetch(path, data === undefined ? {} : {
@@ -110,10 +370,14 @@ async function api(path, data, binary = false) {
       body: binary ? data : JSON.stringify(data),
     });
   } catch {
-    throw new Error('Der lokale Tracker ist nicht erreichbar. Prüfe, ob das Startfenster noch geöffnet ist.');
+    setServerOnline(false);
+    throw new Error(offlineMessage);
   }
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'Anfrage fehlgeschlagen.');
+  if (!response.ok) {
+    if (response.status === 403) checkConnection();
+    throw new Error(body.error || 'Anfrage fehlgeschlagen.');
+  }
   return body;
 }
 
@@ -124,10 +388,12 @@ function options(select, values, first = null) {
   values.forEach(value => select.append(el('option', { value, text: String(value) })));
   if ([...select.options].some(o => o.value === old)) select.value = old;
 }
-function tagChecks(container, values, selected, onChange) {
+function tagChecks(container, values, selected, onChange, kind = null) {
   container.replaceChildren(...values.map(value => {
     const checkbox = el('input', { type: 'checkbox', value, checked: selected.has(value), onchange: e => onChange(value, e.target.checked) });
-    return el('label', { class: 'tag-check' }, [checkbox, el('span', { text: value })]);
+    const label = el('label', { class: 'tag-check' }, [checkbox, el('span', { text: value })]);
+    if (kind === 'reward_type') rewardColors(label, recordByName(kind, value)?.color || defaultRewardColor(value));
+    return label;
   }));
 }
 function knownMonsters() {
@@ -146,7 +412,7 @@ async function loadState() {
   tagChecks($('reward-filters'), state.reward_types, rewardFilter, (value, checked) => {
     if (checked) rewardFilter.add(value); else rewardFilter.delete(value);
     render();
-  });
+  }, 'reward_type');
   refreshEditorCatalogs();
   if ($('catalog-dialog').open) renderCatalogs();
   render();
@@ -161,7 +427,7 @@ function refreshEditorCatalogs() {
   }
   for (const [container, kind] of [['editor-reward-types', 'reward_type'], ['editor-tags', 'tag']]) {
     const checked = new Set([...$(container).querySelectorAll('input:checked')].map(input=>input.value));
-    tagChecks($(container), records(kind).map(r=>r.name), checked, ()=>{});
+    tagChecks($(container), records(kind).map(r=>r.name), checked, ()=>{}, kind);
   }
 }
 
@@ -175,16 +441,18 @@ function targetsNode(q) {
   q.targets.forEach((t, index) => {
     const monster = recordById('monster', t.monster_id) || recordByName('monster', t.monster);
     const status = recordById('state', t.type_id) || recordByName('state', t.type);
-    node.append(el('span', { class: 'target-display' }, [monsterGlyph(monster, status), el('span', { class: 'target-info' }, [el('span', { class:'target-name', text: `${t.count > 1 ? `${t.count} × ` : ''}${t.monster}` }), statePill(status)])]));
+    node.append(el('span', { class: 'target-display' }, [monsterGlyph(monster, status), el('span', { class: 'target-info' }, [el('span', { class:'target-name', text: `${t.count > 1 ? `${t.count} × ` : ''}${t.monster}` })])]));
   });
   return node;
 }
-function pill(value) {
+function pill(value, color = recordByName('reward_type', value)?.color) {
   let style = '';
   if (value === 'Ausrüstung') style = ' equipment';
   else if (value === 'Dekorationen') style = ' deco';
   else if (value.includes('Material')) style = ' material';
-  return el('span', { class: `pill${style}`, text: value });
+  const node = el('span', { class: `pill${style}`, text: value });
+  rewardColors(node, color || defaultRewardColor(value));
+  return node;
 }
 function filteredQuests() {
   const query = $('search').value.trim().toLocaleLowerCase('de');
@@ -211,17 +479,48 @@ function filteredQuests() {
     if ($('filter-tag').value && !(q.tags || []).includes($('filter-tag').value)) return false;
     return true;
   });
-  const sort = $('sort').value;
-  if (sort === 'name') result.sort((a, b) => a.name.localeCompare(b.name, 'de'));
-  if (sort === 'stars-desc') result.sort((a, b) => b.stars - a.stars);
-  if (sort === 'stars-asc') result.sort((a, b) => a.stars - b.stars);
-  if (sort === 'open') result.sort((a, b) => Number(a.progress.all_rewards) - Number(b.progress.all_rewards));
-  if (sort === 'hr') result.sort((a, b) => (a.hr || 0) - (b.hr || 0));
+  const compareText = (a, b) => a.localeCompare(b, 'de', { numeric: true, sensitivity: 'base' });
+  const comparators = {
+    name: (a, b) => compareText(a.name, b.name),
+    rank: (a, b) => a.stars - b.stars || (a.hr ?? 0) - (b.hr ?? 0) || compareText(a.rank, b.rank),
+    progress: (a, b) => Number(a.progress.all_rewards) - Number(b.progress.all_rewards) || Number(a.progress.first_clear) - Number(b.progress.first_clear),
+  };
+  if (questSort.column === 'reward') {
+    const tags = new Map(result.map(q => [q, [...q.reward_types].sort((a, b) => questSort.direction * compareText(a, b))]));
+    result.sort((a, b) => {
+      const aTags = tags.get(a), bTags = tags.get(b);
+      // Untagged quests stay last; compare the highest-priority tag first.
+      if (!aTags.length || !bTags.length) return Number(!aTags.length) - Number(!bTags.length);
+      for (let index = 0; index < Math.min(aTags.length, bTags.length); index++) {
+        const comparison = questSort.direction * compareText(aTags[index], bTags[index]);
+        if (comparison) return comparison;
+      }
+      // A single tag precedes the same tag plus additional tags in either direction.
+      return aTags.length - bTags.length;
+    });
+  } else if (questSort.column) {
+    result.sort((a, b) => questSort.direction * comparators[questSort.column](a, b));
+  }
   return result;
+}
+function renderSortHeaders() {
+  document.querySelectorAll('[data-sort-column]').forEach(button => {
+    const active = button.dataset.sortColumn === questSort.column;
+    button.classList.toggle('is-sorted', active);
+    button.querySelector('.sort-indicator').textContent = active ? (questSort.direction === 1 ? '↑' : '↓') : '↕';
+    const label = button.querySelector('.sort-caption').textContent;
+    const nextDirection = active && questSort.direction === 1 ? 'absteigend' : 'aufsteigend';
+    button.setAttribute('aria-label', `${label}${active ? `, ${questSort.direction === 1 ? 'aufsteigend' : 'absteigend'} sortiert` : ''}. ${nextDirection} sortieren`);
+    button.title = `${label}: ${nextDirection} sortieren`;
+  });
 }
 function renderActiveFilters() {
   const pills = [];
-  const add = (label, clear) => pills.push(el('button', { type: 'button', class: 'active-pill', onclick: () => { clear(); render(); }, 'aria-label': `Filter entfernen: ${label}` }, [label, icon('close')]));
+  const add = (label, clear, color = null) => {
+    const node = el('button', { type: 'button', class: 'active-pill', onclick: () => { clear(); render(); }, 'aria-label': `Filter entfernen: ${label}` }, [label, icon('close')]);
+    rewardColors(node, color);
+    pills.push(node);
+  };
   filterIds.forEach(id => {
     const input = $(id);
     if (!input.value) return;
@@ -232,11 +531,12 @@ function renderActiveFilters() {
   rewardFilter.forEach(value => add(value, () => {
     rewardFilter.delete(value);
     [...$('reward-filters').querySelectorAll('input')].find(i => i.value === value).checked = false;
-  }));
+  }, recordByName('reward_type', value)?.color || defaultRewardColor(value)));
   $('active-filters').replaceChildren(...pills);
   $('active-filters').hidden = !pills.length;
 }
 function render() {
+  renderSortHeaders();
   const total = state.quests.length;
   const cleared = state.quests.filter(q => q.progress.first_clear).length;
   const rewarded = state.quests.filter(q => q.progress.all_rewards).length;
@@ -256,6 +556,7 @@ function render() {
       el('p', { text: total ? 'Passe deine Filter an oder suche nach einem anderen Begriff.' : 'Lege eine Quest an oder importiere eine Questliste als ZIP.' }),
       el('button', { class: 'button', onclick: total ? resetFilters : () => openEditor() }, [total ? 'Filter zurücksetzen' : 'Erste Quest anlegen'])]));
   }
+  updateConnectionControls();
 }
 function questNode(q) {
   const hasImages = q.images.length > 0;
@@ -274,13 +575,13 @@ function questNode(q) {
   } }, [q.name, icon('chevron')]);
   const main = el('div', { class: 'quest-main' }, [thumb, el('div', { class: 'quest-text' }, [title, targetsNode(q)])]);
   const rank = el('div', { class: 'quest-rank' }, [el('strong', { text: `${q.stars} ★` }), el('small', { text: q.rank }), el('small', { text: q.hr == null ? 'JR: keine Angabe' : `JR ${q.hr}+` })]);
-  const reward = el('div', { class: 'quest-reward' }, [el('div', { class: 'reward-pills' }, q.reward_types.map(pill))]);
+  const reward = el('div', { class: 'quest-reward' }, [el('div', { class: 'reward-pills' }, q.reward_types.map(value => pill(value)))]);
   if (q.rewards.length) {
     const first = q.rewards[0];
     reward.append(el('div', { class: 'reward-name', text: first.name }), el('div', { class: 'reward-needed', text: `${first.required ? `${first.required} benötigt` : ''}${q.rewards.length > 1 ? ` · +${q.rewards.length - 1} weitere` : ''}` }));
   }
   const progress = el('div', { class: 'status-cell' }, [progressControl(q, 'first_clear', 'Erster Abschluss'), progressControl(q, 'all_rewards', 'Alle Belohnungen')]);
-  const edit = el('button', { class: 'icon-button', title: 'Quest bearbeiten', 'aria-label': `${q.name} bearbeiten`, onclick: () => openEditor(q) }, [icon('edit')]);
+  const edit = el('button', { class: 'icon-button quest-edit', title: 'Quest bearbeiten', 'aria-label': `${q.name} bearbeiten`, onclick: () => openEditor(q) }, [icon('edit')]);
   const item = el('article', { class: `quest-item${q.progress.all_rewards ? ' completed' : ''}` }, [el('div', { class: 'quest-row' }, [main, rank, reward, progress, edit])]);
   if (expanded.has(q.id)) item.append(detailNode(q));
   return item;
@@ -372,6 +673,7 @@ function addReward(reward = { name: '', required: '' }) {
   $('reward-rows').append(row);
 }
 function openEditor(q = null) {
+  if (!serverOnline) { setServerOnline(false); return; }
   editing = q;
   draftImages = q ? [...q.images] : [];
   $('quest-form').reset();
@@ -389,7 +691,7 @@ function openEditor(q = null) {
   (q?.targets || [{ count: 1, monster: '', type: 'Normal' }]).forEach(addTarget);
   $('reward-rows').replaceChildren();
   (q?.rewards || []).forEach(addReward);
-  tagChecks($('editor-reward-types'), state.reward_types, new Set(q?.reward_types || []), () => {});
+  tagChecks($('editor-reward-types'), state.reward_types, new Set(q?.reward_types || []), () => {}, 'reward_type');
   renderDraftImages();
   $('editor').showModal();
   $('quest-name').focus();
@@ -572,7 +874,7 @@ function renderCatalogs() {
   const term = $('catalog-search').value.trim().toLocaleLowerCase('de');
   const rows = records(kind).filter(r=>[r.name,...r.aliases].some(n=>n.toLocaleLowerCase('de').includes(term)));
   $('catalog-list').replaceChildren(...rows.map(r=> {
-    const preview = kind === 'monster' ? monsterGlyph(r) : kind === 'state' ? statePill(r) : null;
+    const preview = kind === 'monster' ? monsterGlyph(r) : kind === 'state' ? statePill(r) : kind === 'reward_type' ? pill(r.name) : null;
     const info = el('div', {class:'catalog-info'}, [el('strong',{text:r.name}),el('small',{text:`${usesRecord(r)} Quests${r.aliases.length ? ` · Auch bekannt als: ${r.aliases.join(', ')}` : ''}`})]);
     const actions = el('div',{class:'catalog-actions'});
     if (!r.is_none) {
@@ -582,11 +884,13 @@ function renderCatalogs() {
     return el('div',{class:'catalog-row'},[preview,info,actions]);
   }));
   if (!rows.length) $('catalog-list').append(el('p',{class:'field-help',text:'Noch keine passenden Einträge. Mit „+ Eintrag“ kannst du einen anlegen.'}));
+  updateConnectionControls();
 }
 function updateColor(value) {
   if (!/^#[0-9a-f]{6}$/i.test(value)) return;
   $('entity-color').value=value; $('entity-color-hex').value=value.toUpperCase();
-  const preview=statePill({name:$('entity-name').value || 'Vorschau',color:value});
+  const name = $('entity-name').value || 'Vorschau';
+  const preview = entityKind === 'reward_type' ? pill(name, $('entity-color-default').checked ? null : value) : statePill({name,color:value});
   $('entity-color-preview').replaceChildren(preview);
 }
 function renderEntityIcon() {
@@ -594,17 +898,22 @@ function renderEntityIcon() {
   $('entity-icon-remove').hidden = !entityIcon;
 }
 function openEntity(kind, record=null, callback=null) {
+  if (!serverOnline) { setServerOnline(false); return; }
   entityKind=kind; entityEditing=record; entityCallback=callback; entityIcon=record?.icon || null;
   $('entity-form').reset();
   $('entity-title').textContent=`${catalogLabels[kind]} ${record ? 'bearbeiten' : 'anlegen'}`;
   $('entity-name').value=record?.name || '';
-  $('entity-state-fields').hidden=kind!=='state';
-  $('entity-color-hex').required=kind==='state';
+  $('entity-color-fields').hidden=!['state','reward_type'].includes(kind);
+  $('entity-color-label').textContent=kind==='reward_type' ? 'Kategoriefarbe' : 'Zustandsfarbe';
+  $('entity-color-help').textContent=kind==='reward_type' ? 'Diese Farbe kennzeichnet die Belohnungsart in der Questliste und den Filtern.' : 'Diese Farbe umrandet ausschließlich das Icon des jeweiligen Monsters. Normal/ohne Zustand hat keine Umrandung.';
+  $('entity-color-default-label').hidden=kind!=='reward_type';
+  $('entity-color-default').checked=!record?.color;
+  $('entity-color-hex').required=['state','reward_type'].includes(kind);
   $('entity-monster-fields').hidden=kind!=='monster';
   $('entity-rank-fields').hidden=kind!=='rank';
   $('entity-stars-min').value=record?.stars_min ?? '';
   $('entity-stars-max').value=record?.stars_max ?? '';
-  updateColor(record?.color || '#7837FC'); renderEntityIcon();
+  updateColor(record?.color || (kind==='reward_type' ? defaultRewardColor(record?.name || '') : '#7837FC')); renderEntityIcon();
   $('entity-dialog').showModal(); $('entity-name').focus();
 }
 async function saveEntity(event) {
@@ -612,6 +921,7 @@ async function saveEntity(event) {
   await safely(async()=> {
     const raw={...(entityEditing || {}),kind:entityKind,name:$('entity-name').value.trim()};
     if (entityKind==='state') raw.color=$('entity-color-hex').value;
+    if (entityKind==='reward_type') raw.color=$('entity-color-default').checked ? null : $('entity-color-hex').value;
     if (entityKind==='monster') raw.icon=entityIcon;
     if (entityKind==='rank') { raw.stars_min=$('entity-stars-min').value ? Number($('entity-stars-min').value) : null; raw.stars_max=$('entity-stars-max').value ? Number($('entity-stars-max').value) : null; }
     $('entity-save').disabled=true;
@@ -623,6 +933,7 @@ async function saveEntity(event) {
   });
 }
 function openMerge(record) {
+  if (!serverOnline) { setServerOnline(false); return; }
   mergeSource=record;
   $('merge-source-label').textContent=`„${record.name}“ wird in den gewählten Eintrag übernommen.`;
   $('merge-target').replaceChildren(...records(record.kind).filter(r=>r.id!==record.id && !r.is_none).map(r=>el('option',{value:r.id,text:r.name})));
@@ -648,8 +959,9 @@ $('catalog-kind').addEventListener('change',renderCatalogs);
 $('catalog-search').addEventListener('input',renderCatalogs);
 $('catalog-add').addEventListener('click',()=>openEntity($('catalog-kind').value));
 $('entity-form').addEventListener('submit',saveEntity);
-$('entity-color').addEventListener('input',()=>updateColor($('entity-color').value));
-$('entity-color-hex').addEventListener('input',()=>updateColor($('entity-color-hex').value));
+$('entity-color').addEventListener('input',()=>{ $('entity-color-default').checked=false; updateColor($('entity-color').value); });
+$('entity-color-hex').addEventListener('input',()=>{ $('entity-color-default').checked=false; updateColor($('entity-color-hex').value); });
+$('entity-color-default').addEventListener('change',()=>updateColor($('entity-color').value));
 $('entity-name').addEventListener('input',()=>updateColor($('entity-color').value));
 $('entity-icon-input').addEventListener('change',uploadEntityIcon);
 $('entity-icon-remove').addEventListener('click',()=>{entityIcon=null;renderEntityIcon();});
@@ -666,7 +978,12 @@ $('merge-form').addEventListener('submit',event=>{event.preventDefault();safely(
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
 filterIds.forEach(id => $(id).addEventListener(id === 'filter-hr' ? 'input' : 'change', render));
 $('search').addEventListener('input', render);
-$('sort').addEventListener('change', render);
+document.querySelectorAll('[data-sort-column]').forEach(button => button.addEventListener('click', () => {
+  const column = button.dataset.sortColumn;
+  questSort.direction = questSort.column === column ? -questSort.direction : 1;
+  questSort.column = column;
+  render();
+}));
 $('reset-filters').addEventListener('click', resetFilters);
 $('new-quest').addEventListener('click', toggleCreateMenu);
 $('add-target').addEventListener('click', () => addTarget());

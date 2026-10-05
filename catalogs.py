@@ -29,6 +29,11 @@ def validate_record(raw):
     if not isinstance(name, str) or not name.strip() or len(name) > 200 or not norm(name):
         raise ValueError('Ein Name mit höchstens 200 Zeichen wird benötigt.')
     record = {'id': qid, 'kind': raw['kind'], 'name': name.strip()}
+    if raw['kind'] == 'reward_type':
+        color = raw.get('color')
+        if color is not None and (not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color)):
+            raise ValueError('Eine Belohnungsfarbe im Format #RRGGBB wird benötigt.')
+        record['color'] = color.upper() if color is not None else None
     if raw['kind'] == 'state':
         color = raw.get('color')
         is_none = qid == stable_id('state', 'Normal')

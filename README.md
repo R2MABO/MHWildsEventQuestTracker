@@ -8,13 +8,19 @@ Voraussetzung: **Python 3.10 oder neuer** von [python.org](https://www.python.or
 
 Auf dem vorbereiteten Rechner verwendet der Starter bereits die vorhandene Python-Laufzeit über die lokale Datei `.python-path`. Diese enthält nur den Pfad zum Interpreter, wird nicht mit der Anwendung geteilt und kann bei Bedarf angepasst werden. Ohne diese Datei suchen die Starter nach regulär installiertem Python.
 
-- **Windows:** `start.bat` doppelklicken.
+- **Windows:** `start.bat` doppelklicken. Der Tracker startet mit sichtbarem Konsolenfenster; dieses während der Nutzung geöffnet lassen oder minimieren.
 - **Linux:** im Projektordner `sh start.sh` ausführen; optional `chmod +x start.sh` und danach `./start.sh`.
 - **macOS:** im Projektordner `chmod +x start.command` einmalig ausführen, dann `start.command` doppelklicken. Alternativ `sh start.sh` im Terminal.
 
-Der Starter öffnet `http://127.0.0.1:8765` im Standardbrowser. Das Startfenster während der Nutzung geöffnet lassen; mit **Strg+C** beenden. Das Schließen des Browser-Tabs beendet den lokalen Dienst nicht. Bei belegtem Port zuerst prüfen, ob der Tracker schon läuft, oder z. B. `python3 app.py --port 8766` nutzen (Windows: `py -3 app.py --port 8766`). Die Anwendung lauscht nur auf dem eigenen Rechner.
+Der Starter öffnet `http://127.0.0.1:8765` im Standardbrowser. Der lokale Server läuft im Konsolenfenster. Das Schließen des Fensters oder **Strg+C** beendet den Server; das Schließen eines Browser-Tabs beendet ihn beim normalen Start nicht. Startfehler werden direkt im Konsolenfenster angezeigt.
+
+Optional aktiviert `--auto-stop` das automatische Beenden nach dem Schließen des letzten Tracker-Tabs, auch beim Direktstart. Der Server wartet nach dem letzten Verbindungsabbruch acht Sekunden, damit Neuladen möglich bleibt. Bei belegtem Port zuerst prüfen, ob der Tracker schon läuft, oder z. B. `python3 app.py --port 8766` nutzen (Windows: `py -3 app.py --port 8766`). Die Anwendung lauscht nur auf dem eigenen Rechner.
 
 Direktstart: `python3 app.py` beziehungsweise `py -3 app.py`. `--no-browser` verhindert das automatische Öffnen, `--data-dir PFAD` verwendet einen anderen Datenordner. Daten sind vom Browser unabhängig und werden direkt gespeichert.
+
+Bei einem Verbindungsabbruch erscheint oben mittig dauerhaft „Server nicht erreichbar“, auch über geöffneten Dialogen. Bearbeitung, Fortschritt und Speichern werden gesperrt; offene Eingaben bleiben im Tab erhalten. Den Tracker erneut starten: Die Seite prüft die Verbindung automatisch und gibt die Bearbeitung wieder frei. Der Hinweis funktioniert auch beim Konsolenstart. Ungespeicherte Entwürfe werden dadurch nicht automatisch gespeichert; nach der Wiederverbindung selbst speichern und den Tab bis dahin geöffnet lassen.
+
+Das kompakte Logo oben links liegt unter `web/logo.png`. `web/favicon.ico` enthält dasselbe Motiv mit transparentem Hintergrund in 16, 24, 32, 48, 64, 128 und 256 Pixeln und liegt für Windows bereit. Die Oberfläche und das Browser-Icon verwenden `web/favicon.svg`, das das PNG direkt einbettet. Die ICO-Datei kann beim Erstellen einer Windows-EXE als Anwendungssymbol eingebunden werden. Der Windows-Starter ist eine BAT-Datei; dessen Dateisymbol lässt sich über eine Windows-Verknüpfung mit diesem ICO anpassen.
 
 ## Daten und Privatsphäre
 
@@ -48,7 +54,13 @@ Das Archivsymbol neben „Questliste teilen“ erstellt ein ausdrücklich **priv
 
 **Stammdaten verwalten** bietet Suche, Bearbeiten und Zusammenführen pro Kategorie. Umbenennen aktualisiert alle zugeordneten Quests, während IDs und Fortschritt erhalten bleiben. Zusammenführen übernimmt die Zuordnungen in den beibehaltenen Eintrag; alte Namen und IDs bleiben für spätere Imports bekannt. Normal bleibt als neutraler Zustand erhalten. Ränge können einen optionalen Sternbereich für den automatischen Vorschlag bekommen.
 
+Belohnungsarten erhalten unter **Stammdaten verwalten → Belohnungsart → Bearbeiten** eine eigene Kategoriefarbe per Farbwähler oder Hexcode mit Vorschau. Die Farbe erscheint in der Questliste, den Filtern und im Questeditor; die Schriftfarbe passt sich für lesbaren Kontrast an. **Standardfarbe verwenden** wählt die kräftige Standardfarbe der jeweiligen Kategorie: Ausrüstung Gold, Materialien Cyan, Artian Material Pink, Rüstkugeln Orange, Dekorationen Violett, Jägerrang XP Limette und Kochzutaten Mint. Eigene Kategorien erhalten automatisch eine Farbe. Eigene Kategoriefarben werden mit den Stammdaten gespeichert und in Questlisten und Backups exportiert.
+
 Beim ersten Start mit einer bestehenden Version-1-Datenbank entsteht vor der Migration eine Sicherung unter `data/migration-backup-v1/quests.sqlite`. Die Nutzerdatenbank bleibt getrennt; Quests und Häkchen bleiben erhalten.
+
+## Theme bearbeiten
+
+Der Palettenbutton rechts neben dem Wilds-Logo öffnet den Theme-Editor. **Aktuell** stellt das ursprüngliche Wilds-Design wieder her; **Dark** und **Light** bieten weitere Vorlagen. Grundfarbe, Akzentfarbe und zweite Akzentfarbe lassen sich per Farbwähler oder Hexcode ändern. Der Tracker erzeugt daraus automatisch abgestufte Flächen, Konturen und kontrastreiche Textfarben. Änderungen erscheinen sofort als Vorschau. **Theme speichern** merkt die Auswahl in diesem Browser; **Abbrechen**, das Schließen-Symbol oder Escape stellen das zuletzt gespeicherte Theme wieder her. Monsterzustandsfarben bleiben unabhängig davon in den Stammdaten definiert. Themes gehören zum lokalen Browserspeicher und sind nicht Teil von Questlisten oder privaten ZIP-Backups.
 
 ## Import und Updates
 
@@ -67,6 +79,8 @@ Einmaliger Erstimport per Terminal: `python3 app.py --import-notion PFAD_ZUR_ZIP
 ## Prüfen
 
 `python3 -m unittest discover -s tests -v` (Windows: `py -3 -m unittest discover -s tests -v`). Die Tests verwenden temporäre Datenordner. Anwendungscode und Starter sind für alle drei Betriebssysteme ausgelegt; die tatsächliche Browserprüfung erfolgte unter Windows. Linux/macOS-Starts benötigen eine Prüfung auf diesen Betriebssystemen.
+
+Die Verbindungserkennung lässt sich zusätzlich mit `node --test tests/test_connection.js` prüfen. Diese Entwicklungstests benötigen Node.js; für den Betrieb des Trackers ist Node.js nicht erforderlich.
 
 `python3 tools/package_release.py` erstellt `dist/wilds-quest-tracker.zip` zum Weitergeben der gesamten Anwendung. Es enthält die Oberfläche, alle drei Starter und die öffentliche Startliste mit Bildern, aber keinen persönlichen Datenordner. Entpacken und den Starter für das jeweilige Betriebssystem nutzen.
 

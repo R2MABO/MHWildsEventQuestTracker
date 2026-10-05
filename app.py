@@ -19,7 +19,7 @@ import threading
 import time
 import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit, unquote
+from urllib.parse import urlsplit, unquote, parse_qs
 import uuid
 import webbrowser
 import zipfile
@@ -515,7 +515,39 @@ class Tracker:
         return {'ok': True}
 
 
-def make_handler(tracker, csrf):
+class BrowserLifetime:
+    """Track open streams rather than timers in throttled background tabs."""
+
+    def __init__(self, grace=8, startup_timeout=120, clock=time.monotonic):
+        self.lock = threading.Lock()
+        self.clock = clock
+        self.grace = grace
+        self.startup_timeout = startup_timeout
+        self.started = clock()
+        self.empty_since = None
+        self.connections = 0
+
+    def opened(self):
+        with self.lock:
+            self.connections += 1
+            self.empty_since = None
+
+    def closed(self):
+        with self.lock:
+            self.connections -= 1
+            if not self.connections:
+                self.empty_since = self.clock()
+
+    def expired(self):
+        with self.lock:
+            if self.connections:
+                return False
+            if self.empty_since is None:
+                return self.clock() - self.started >= self.startup_timeout
+            return self.clock() - self.empty_since >= self.grace
+
+
+def make_handler(tracker, csrf, lifetime=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             if args and str(args[1] if len(args) > 1 else "").startswith("5"):
@@ -565,14 +597,21 @@ def make_handler(tracker, csrf):
         def dispatch(self, mutation):
             path = urlsplit(self.path).path
             if not mutation:
-                if path == "/api/state":
+                if path == "/api/session":
+                    if parse_qs(urlsplit(self.path).query).get('token') != [csrf]:
+                        self.send(403, {"error": "Ungültiger Sitzungsschlüssel."})
+                        return
+                    self.browser_session()
+                elif path == "/api/health":
+                    self.send(200, {"ok": True, "token": csrf})
+                elif path == "/api/state":
                     self.send(200, tracker.state())
                 elif path in ("/api/export/catalog", "/api/export/backup"):
                     private = path.endswith("backup")
                     self.send(200, tracker.export(private), "application/zip", "wilds-privates-backup.zip" if private else "wilds-questliste.zip")
                 elif path in ("/", "/index.html"):
                     self.send(200, (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__TRACKER_TOKEN__", csrf).encode("utf-8"), "text/html; charset=utf-8")
-                elif path in ("/app.js", "/style.css", "/favicon.svg"):
+                elif path in ("/app.js", "/style.css", "/favicon.svg", "/favicon.ico", "/logo.png"):
                     file = ROOT / "web" / path[1:]
                     self.send(200, file.read_bytes(), mimetypes.guess_type(file.name)[0] or "application/octet-stream")
                 elif re.fullmatch(r"/images/[a-f0-9]{64}\.(png|jpg|gif|webp)", path):
@@ -623,6 +662,26 @@ def make_handler(tracker, csrf):
             else:
                 self.send(404, {"error": "Nicht gefunden."})
 
+        def browser_session(self):
+            self.connection.settimeout(5)
+            stop = getattr(self.server, 'browser_stop', threading.Event())
+            if lifetime:
+                lifetime.opened()
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/event-stream')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                while not stop.is_set():
+                    self.wfile.write(b': connected\n\n')
+                    self.wfile.flush()
+                    stop.wait(1)
+            except OSError:
+                pass  # Tab closed, navigated away, or browser exited.
+            finally:
+                if lifetime:
+                    lifetime.closed()
+
         def do_GET(self):
             self.route()
 
@@ -637,6 +696,7 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--auto-stop", action="store_true", help="Nach Schließen des letzten Browser-Tabs automatisch beenden")
     parser.add_argument("--import-notion", type=Path, help="Einmaligen Notion-Erstimport ausführen und beenden")
     args = parser.parse_args()
     tracker = Tracker(args.data_dir)
@@ -654,21 +714,30 @@ def main():
         preview = tracker.preview(seed.read_bytes())
         tracker.commit(preview["token"], {r["quest"]["id"]: "add" for r in preview["rows"]})
     token = secrets.token_urlsafe(32)
+    lifetime = BrowserLifetime() if args.auto_stop else None
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(tracker, token))
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(tracker, token, lifetime))
     except OSError:
         print(f"Port {args.port} ist belegt. Läuft der Tracker bereits? Alternativ: app.py --port 8766")
         return 1
-    server.daemon_threads = True
+    server.browser_stop = threading.Event()
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Wilds Quest Tracker: {url}\nDaten: {tracker.directory.resolve()}\nZum Beenden Strg+C drücken.", flush=True)
     if not args.no_browser:
         webbrowser.open(url)
+    def watch_browser():
+        while not server.browser_stop.wait(.5):
+            if lifetime.expired():
+                server.shutdown()
+                return
+    if lifetime:
+        threading.Thread(target=watch_browser, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nTracker beendet.")
     finally:
+        server.browser_stop.set()
         server.server_close()
     return 0
 

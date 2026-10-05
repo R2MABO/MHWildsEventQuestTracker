@@ -12,7 +12,7 @@
 </head>
 <body>
   <aside class="sidebar" aria-label="Questfilter">
-    <a class="brand" href="/" aria-label="Wilds Quest Tracker Startseite"><img src="/favicon.svg" alt="" width="42" height="42"><span>WILDS<small>QUEST TRACKER</small></span></a>
+    <div class="brand-header"><a class="brand" href="/" aria-label="Wilds Quest Tracker Startseite"><img src="/favicon.svg" alt="" width="32" height="48"><span>WILDS<small>QUEST TRACKER</small></span></a><button id="open-theme" class="icon-button theme-button" type="button" title="Theme bearbeiten" aria-label="Theme bearbeiten" aria-haspopup="dialog" aria-controls="theme-dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.5 1.5 0 0 1 1.1-2.5H17A4 4 0 0 0 21 11a9 9 0 0 0-9-8Z"/><circle cx="7.5" cy="10" r=".8"/><circle cx="10.5" cy="7" r=".8"/><circle cx="15" cy="7.5" r=".8"/></svg></button></div>
     <div class="sidebar-heading"><span>JÄGERNOTIZEN</span><span class="local-dot">Lokal</span></div>
     <div class="nav-current"><span data-icon="book"></span><strong>Eventquests</strong><span id="nav-count" class="badge">–</span></div>
     <button id="manage-catalogs" class="button subtle nav-manage"><span data-icon="archive"></span>Stammdaten verwalten</button>
@@ -38,10 +38,16 @@
       <article class="stat-card"><span class="stat-icon" data-icon="gem"></span><div><span class="stat-label">Alle Belohnungen</span><div class="stat-number" id="stat-rewards">–</div><div class="progress-track"><div id="rewards-bar"></div></div></div></article>
     </section>
     <section class="quest-panel" aria-label="Questliste">
-      <div class="panel-heading"><div class="panel-title"><h2>Questkatalog</h2><span id="result-count" class="muted">Wird geladen …</span></div><div class="file-actions"><button id="import-button" class="button subtle"><span data-icon="upload"></span>Importieren</button><button id="export-button" class="button subtle"><span data-icon="download"></span>Questliste teilen</button><button id="backup-button" class="icon-button" title="Privates Backup inklusive Fortschritt herunterladen" aria-label="Privates Backup herunterladen"><span data-icon="archive"></span></button></div></div>
-      <div class="list-toolbar"><div class="search-wrap"><span data-icon="search"></span><input id="search" type="search" placeholder="Quest, Monster oder Belohnung suchen …" aria-label="Quests durchsuchen"><kbd>/</kbd></div><label class="sort-label">Sortieren<select id="sort"><option value="original">Katalog-Reihenfolge</option><option value="name">Questname A–Z</option><option value="stars-desc">Sterne absteigend</option><option value="stars-asc">Sterne aufsteigend</option><option value="open">Offene Belohnungen zuerst</option><option value="hr">Jägerrang aufsteigend</option></select></label></div>
+      <div class="panel-heading"><div class="panel-title"><h2>Questkatalog</h2><span id="result-count" class="muted">Wird geladen …</span></div><div class="file-actions"><button id="import-button" class="button subtle"><span data-icon="download"></span>Importieren</button><button id="export-button" class="button subtle"><span data-icon="upload"></span>Questliste teilen</button><button id="backup-button" class="icon-button" title="Privates Backup inklusive Fortschritt herunterladen" aria-label="Privates Backup herunterladen"><span data-icon="archive"></span></button></div></div>
+      <div class="list-toolbar"><div class="search-wrap"><span data-icon="search"></span><input id="search" type="search" placeholder="Quest, Monster oder Belohnung suchen …" aria-label="Quests durchsuchen"><kbd>/</kbd></div></div>
       <div id="active-filters" class="active-filters" hidden></div>
-      <div class="table-head"><span>QUEST & JAGDZIEL</span><span>RANG</span><span>BELOHNUNG</span><span>DEIN FORTSCHRITT</span><span></span></div>
+      <div class="table-head" role="group" aria-label="Questliste sortieren">
+        <button type="button" class="column-sort" data-sort-column="name"><span class="sort-caption">QUEST &amp; JAGDZIEL</span><span class="sort-indicator" aria-hidden="true">↕</span></button>
+        <button type="button" class="column-sort" data-sort-column="rank"><span class="sort-caption">RANG</span><span class="sort-indicator" aria-hidden="true">↕</span></button>
+        <button type="button" class="column-sort" data-sort-column="reward"><span class="sort-caption">BELOHNUNG</span><span class="sort-indicator" aria-hidden="true">↕</span></button>
+        <button type="button" class="column-sort" data-sort-column="progress"><span class="sort-caption">DEIN FORTSCHRITT</span><span class="sort-indicator" aria-hidden="true">↕</span></button>
+        <span aria-hidden="true"></span>
+      </div>
       <div id="quest-list" class="quest-list" aria-live="polite"></div>
       <div class="panel-footer"><span><span class="mini-dot"></span>Automatisch lokal gespeichert</span><span>Questliste und persönlicher Fortschritt sind getrennt.</span></div>
     </section>
@@ -80,7 +86,7 @@
   <dialog id="entity-dialog" class="entity-dialog">
     <form id="entity-form"><div class="dialog-header"><h2 id="entity-title">Eintrag anlegen</h2><button class="icon-button" type="button" data-close="entity-dialog" aria-label="Stammdateneintrag schließen"><span data-icon="close"></span></button></div><div class="dialog-body">
       <label class="field-label" for="entity-name">Name</label><input id="entity-name" required maxlength="200">
-      <div id="entity-state-fields"><label class="field-label" for="entity-color">Zustandsfarbe</label><div class="color-editor"><input id="entity-color" type="color" value="#7837fc"><input id="entity-color-hex" type="text" pattern="#[0-9a-fA-F]{6}" maxlength="7" aria-label="Farbe als Hexcode"><span id="entity-color-preview" class="color-preview">Vorschau</span></div><p class="field-help">Diese Farbe umrandet ausschließlich das Icon des jeweiligen Monsters. Normal/ohne Zustand hat keine Umrandung.</p></div>
+      <div id="entity-color-fields"><label id="entity-color-label" class="field-label" for="entity-color">Zustandsfarbe</label><div class="color-editor"><input id="entity-color" type="color" value="#7837fc"><input id="entity-color-hex" type="text" pattern="#[0-9a-fA-F]{6}" maxlength="7" aria-label="Farbe als Hexcode"><span id="entity-color-preview" class="color-preview">Vorschau</span></div><label id="entity-color-default-label" class="field-help" hidden><input id="entity-color-default" type="checkbox"> Standardfarbe verwenden</label><p id="entity-color-help" class="field-help">Diese Farbe umrandet ausschließlich das Icon des jeweiligen Monsters. Normal/ohne Zustand hat keine Umrandung.</p></div>
       <div id="entity-monster-fields"><div class="section-heading"><h3>Monster-Icon</h3><label for="entity-icon-input" class="text-button file-label">+ Icon auswählen</label><input id="entity-icon-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div><div id="entity-icon-preview"></div><button type="button" id="entity-icon-remove" class="text-button">Icon entfernen</button><p class="field-help">Optional · PNG, JPEG, WebP oder GIF</p></div>
       <div id="entity-rank-fields" class="editor-grid"><div><label class="field-label" for="entity-stars-min">Sterne ab (optional)</label><input id="entity-stars-min" type="number" min="1" max="10000"></div><div><label class="field-label" for="entity-stars-max">Sterne bis (optional)</label><input id="entity-stars-max" type="number" min="1" max="10000"></div></div>
     </div><div class="dialog-footer"><button type="button" class="button" data-close="entity-dialog">Abbrechen</button><button id="entity-save" type="submit" class="button primary">Eintrag speichern</button></div></form>
@@ -89,8 +95,33 @@
 
   <dialog id="image-dialog" class="image-dialog"><div class="image-controls"><span id="image-caption"></span><div><button id="previous-image" class="icon-button" aria-label="Vorheriges Bild"><span data-icon="left"></span></button><span id="image-position"></span><button id="next-image" class="icon-button" aria-label="Nächstes Bild"><span data-icon="right"></span></button><button class="icon-button" data-close="image-dialog" aria-label="Bildansicht schließen"><span data-icon="close"></span></button></div></div><img id="large-image" alt="Belohnungsbild"></dialog>
   <dialog id="confirm-dialog" class="confirm-dialog"><div class="dialog-header"><h2 id="confirm-title"></h2></div><div class="dialog-body"><p id="confirm-text"></p></div><div class="dialog-footer"><button id="confirm-cancel" class="button">Abbrechen</button><button id="confirm-ok" class="button primary">Bestätigen</button></div></dialog>
+  <dialog id="theme-dialog" class="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description">
+    <form id="theme-form">
+      <div class="dialog-header"><div><div class="eyebrow">DEIN JAGDJOURNAL</div><h2 id="theme-title">Theme bearbeiten</h2></div><button id="theme-close" class="icon-button" type="button" aria-label="Theme-Editor schließen"><span data-icon="close"></span></button></div>
+      <div class="dialog-body">
+        <p id="theme-description" class="field-help">Wähle drei Basisfarben. Flächen, Konturen und lesbare Textfarben entstehen automatisch. Änderungen siehst du sofort im Tracker.</p>
+        <div class="section-heading"><h3>Presets</h3><span id="theme-name" class="muted"></span></div>
+        <div class="theme-presets" role="group" aria-label="Theme-Presets">
+          <button type="button" class="theme-preset" data-theme-preset="current" aria-pressed="false"><span class="preset-colors" aria-hidden="true"><i></i><i></i><i></i></span>Aktuell<small>Wilds Original</small></button>
+          <button type="button" class="theme-preset" data-theme-preset="dark" aria-pressed="false"><span class="preset-colors" aria-hidden="true"><i></i><i></i><i></i></span>Dark<small>Kühl &amp; dunkel</small></button>
+          <button type="button" class="theme-preset" data-theme-preset="light" aria-pressed="false"><span class="preset-colors" aria-hidden="true"><i></i><i></i><i></i></span>Light<small>Hell &amp; warm</small></button>
+        </div>
+        <div class="section-heading"><h3>Basisfarben</h3><span class="muted">Farbwähler oder Hexcode</span></div>
+        <div class="theme-colors">
+          <div><label class="field-label" for="theme-base">Grundfarbe</label><div class="color-editor"><input id="theme-base" type="color"><input id="theme-base-hex" type="text" pattern="#[0-9a-fA-F]{6}" maxlength="7" required aria-label="Grundfarbe als Hexcode" spellcheck="false"></div><p class="field-help">Bestimmt Flächen und Hell/Dunkel.</p></div>
+          <div><label class="field-label" for="theme-accent">Akzentfarbe</label><div class="color-editor"><input id="theme-accent" type="color"><input id="theme-accent-hex" type="text" pattern="#[0-9a-fA-F]{6}" maxlength="7" required aria-label="Akzentfarbe als Hexcode" spellcheck="false"></div><p class="field-help">Buttons, Auswahl und Highlights.</p></div>
+          <div><label class="field-label" for="theme-secondary">Zweite Akzentfarbe</label><div class="color-editor"><input id="theme-secondary" type="color"><input id="theme-secondary-hex" type="text" pattern="#[0-9a-fA-F]{6}" maxlength="7" required aria-label="Zweite Akzentfarbe als Hexcode" spellcheck="false"></div><p class="field-help">Fortschritt und Statusanzeigen.</p></div>
+        </div>
+        <div class="section-heading"><h3>Automatische Abstufungen</h3></div><div id="theme-shades" class="theme-shades" aria-label="Generierte Farbpalette"></div>
+        <p class="field-help">Dein Theme wird in diesem Browser gespeichert. Monsterzustände behalten ihre Stammdatenfarben.</p>
+        <p id="theme-storage-error" class="notice" role="alert" hidden></p>
+      </div>
+      <div class="dialog-footer"><button id="theme-cancel" type="button" class="button">Abbrechen</button><button type="submit" class="button primary">Theme speichern</button></div>
+    </form>
+  </dialog>
   <input id="import-input" type="file" accept=".zip,application/zip" hidden>
   <div id="toast" class="toast" role="status" hidden></div>
+  <div id="connection-notice" class="connection-notice" popover="manual" role="alert" aria-live="assertive" hidden><strong>Server nicht erreichbar</strong><span>Bearbeitung und Speichern sind gesperrt. Starte den Tracker erneut.</span><small>Deine offenen Eingaben bleiben erhalten. Die Verbindung wird automatisch erneut geprüft.</small></div>
   <div id="loading-overlay" class="loading-overlay" hidden><span class="spinner"></span><span id="loading-message">Wird verarbeitet …</span></div>
 </body>
 </html>

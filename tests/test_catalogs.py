@@ -49,6 +49,33 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.create('state','Fehler',color='red')
         with self.assertRaises(ValueError): self.create('monster','Test-Monster')
 
+    def test_reward_color_persists_and_roundtrips_with_catalogs(self):
+        reward=self.record('reward_type','Ausrüstung')
+        self.assertIsNone(reward.get('color'))
+        saved=self.tracker.save_catalog({**reward,'color':'#abcdef'})
+        self.assertEqual(saved['color'],'#ABCDEF')
+        reopened=Tracker(self.temp.name)
+        self.assertEqual(next(r for r in reopened.state()['catalogs']['reward_type'] if r['id']==reward['id'])['color'],'#ABCDEF')
+        blob=self.tracker.export()
+        self.tracker.save_catalog({**saved,'color':'#112233'})
+        preview=self.tracker.preview(blob)
+        self.tracker.commit(preview['token'],{})
+        self.assertEqual(self.record('reward_type','Ausrüstung')['color'],'#112233')
+        preview=self.tracker.preview(blob)
+        self.tracker.commit(preview['token'],{},update_catalogs=True)
+        self.assertEqual(self.record('reward_type','Ausrüstung')['color'],'#ABCDEF')
+        self.tracker.save_catalog({**saved,'color':None})
+        self.assertIsNone(self.record('reward_type','Ausrüstung')['color'])
+
+    def test_reward_color_validation_accepts_legacy_records(self):
+        legacy={'id':str(uuid.uuid4()),'kind':'reward_type','name':'Alte Belohnung'}
+        self.assertIsNone(catalogs.validate_record(legacy)['color'])
+        custom=self.create('reward_type','Neue Belohnung',color='#123abc')
+        self.assertEqual(custom['color'],'#123ABC')
+        for invalid in ('red','#abc','#1234567','',123,False):
+            with self.subTest(color=invalid), self.assertRaises(ValueError):
+                catalogs.validate_record({**legacy,'color':invalid})
+
     def test_rename_and_merge_preserve_quest_ids_progress_and_import_aliases(self):
         q=quest()
         self.tracker.save_quest(q,True)

@@ -3,8 +3,11 @@ import io
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import threading
+import time
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -12,7 +15,7 @@ import uuid
 import zipfile
 from http.server import ThreadingHTTPServer
 
-from app import Tracker, ValidationError, image_key, make_handler, parse_package
+from app import BrowserLifetime, Tracker, ValidationError, image_key, make_handler, parse_package
 
 PNG = b'\x89PNG\r\n\x1a\n' + b'fixture'
 
@@ -221,6 +224,82 @@ class TrackerTests(unittest.TestCase):
         self.assertFalse(reopened.new_catalog)
 
 
+class BrowserLifetimeTests(unittest.TestCase):
+    def setUp(self):
+        self.now = 0
+        self.lifetime = BrowserLifetime(clock=lambda: self.now)
+
+    def test_no_tab_startup_timeout(self):
+        self.now = 119
+        self.assertFalse(self.lifetime.expired())
+        self.now = 120
+        self.assertTrue(self.lifetime.expired())
+
+    def test_reload_and_multiple_tabs(self):
+        self.lifetime.opened()
+        self.lifetime.opened()
+        self.lifetime.closed()
+        self.now = 1000
+        self.assertFalse(self.lifetime.expired())
+        self.lifetime.closed()
+        self.now += 7
+        self.assertFalse(self.lifetime.expired())
+        self.lifetime.opened()
+        self.now += 1000
+        self.assertFalse(self.lifetime.expired())
+        self.lifetime.closed()
+        self.now += 8
+        self.assertTrue(self.lifetime.expired())
+
+    def test_stream_disconnect_releases_tab(self):
+        with tempfile.TemporaryDirectory() as directory:
+            server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(Tracker(directory), 'test-token', self.lifetime))
+            server.browser_stop = threading.Event()
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            url = f'http://127.0.0.1:{server.server_port}/api/session'
+            try:
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(url + '?token=wrong')
+                self.assertEqual(error.exception.code, 403)
+                self.assertEqual(self.lifetime.connections, 0)
+                with urlopen(url + '?token=test-token', timeout=5) as response:
+                    self.assertEqual(response.headers['Content-Type'], 'text/event-stream')
+                    self.assertEqual(response.readline(), b': connected\n')
+                    self.assertEqual(self.lifetime.connections, 1)
+                deadline = time.monotonic() + 5
+                while self.lifetime.connections and time.monotonic() < deadline:
+                    time.sleep(.05)
+                self.assertEqual(self.lifetime.connections, 0)
+            finally:
+                server.browser_stop.set()
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
+    def test_process_stops_after_last_tab_disconnects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            process = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve().parents[1] / 'app.py'),
+                 '--auto-stop', '--no-browser', '--port', '0', '--data-dir', directory],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                url = process.stdout.readline().strip().split(': ', 1)[1]
+                with urlopen(url, timeout=5) as response:
+                    html = response.read().decode()
+                token = html.split('name="tracker-token" content="', 1)[1].split('"', 1)[0]
+                with urlopen(url + '/api/session?token=' + token, timeout=5) as response:
+                    self.assertEqual(response.readline(), b': connected\n')
+                    self.assertIsNone(process.poll())
+                stdout, stderr = process.communicate(timeout=18)
+                self.assertEqual(process.returncode, 0, stderr)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=5)
+
+
 class HTTPTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -246,6 +325,11 @@ class HTTPTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as result:
             urlopen(Request(self.url + '/api/state', headers={'Host': 'evil.invalid'}))
         self.assertEqual(result.exception.code, 403)
+
+    def test_health_returns_current_session_without_loading_quest_data(self):
+        with urlopen(self.url + '/api/health') as response:
+            self.assertEqual(json.load(response), {'ok': True, 'token': 'test-token'})
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
     def test_http_create_progress_export_and_no_traversal(self):
         raw = json.dumps(quest()).encode()

@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = [ROOT / name for name in ('app.py', 'catalogs.py', 'README.md', 'LICENSE', '.gitignore', 'start.bat', 'start.sh', 'start.command')]
 FILES += sorted((ROOT / 'web').glob('*'))
 FILES += sorted(path for path in (ROOT / 'seed').rglob('*') if path.is_file())
-FILES += [ROOT / 'tests' / 'test_tracker.py', ROOT / 'tests' / 'test_catalogs.py', ROOT / 'tools' / 'package_release.py', ROOT / 'tools' / 'fetch_monsters.py']
+FILES += [ROOT / 'tests' / 'test_tracker.py', ROOT / 'tests' / 'test_catalogs.py', ROOT / 'tests' / 'test_connection.js', ROOT / 'tools' / 'package_release.py', ROOT / 'tools' / 'fetch_monsters.py']
 
 
 def main():
