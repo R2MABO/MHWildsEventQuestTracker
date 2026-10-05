@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 import re
 import secrets
 import sqlite3
+import sys
 import threading
 import time
 import unicodedata
@@ -26,6 +27,20 @@ import zipfile
 import catalogs
 
 ROOT = Path(__file__).resolve().parent
+
+
+def default_data_directory():
+    """Keep portable user data outside bundled resources and macOS .app files."""
+    if not getattr(sys, 'frozen', False):
+        return ROOT / 'data'
+    executable = Path(sys.executable).resolve()
+    parent = executable.parent
+    if (sys.platform == 'darwin' and parent.name == 'MacOS'
+            and parent.parent.name == 'Contents' and parent.parent.parent.suffix == '.app'):
+        parent = parent.parent.parent.parent
+    return parent / 'data'
+
+
 REWARD_TYPES = ["Ausrüstung", "Materialien", "Artian Material", "Rüstkugeln", "Dekorationen", "Jägerrang XP", "Kochzutaten"]
 MONSTER_TYPES = ["Normal", "Tempered", "Frenzy", "Archtempered"]
 RANKS = ["Low-Rank", "High-Rank", "Master-Rank"]
@@ -147,6 +162,24 @@ def validate_progress(raw):
     return {"first_clear": raw["first_clear"] or raw["all_rewards"], "all_rewards": raw["all_rewards"]}
 
 
+def validate_crown_backup(raw):
+    if not isinstance(raw, list) or len(raw) > 1000:
+        raise ValidationError('Ungültige Kronenliste im Backup.')
+    records = []
+    for monster in raw:
+        if not isinstance(monster, dict) or any(not isinstance(monster.get(k), bool) for k in ('small', 'gold')):
+            raise ValidationError('Ungültiger Kronenfortschritt im Backup.')
+        key = monster.get('icon')
+        if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[a-f0-9]{64}\.(png|jpg|gif|webp)', key)):
+            raise ValidationError('Ungültiges Monsterbild im Backup.')
+        records.append({'id': identifier(monster.get('id')), 'name': text_value(monster.get('name'), 'Monstername', 200, True),
+                        'icon': key, 'source': text_value(monster.get('source', ''), 'Bildquelle', 1000),
+                        'small': monster['small'], 'gold': monster['gold']})
+    if len({m['id'] for m in records}) != len(records) or len({normalized(m['name']) for m in records}) != len(records):
+        raise ValidationError('Doppelte Monster im Kronenbackup.')
+    return records
+
+
 def parse_notion(zf):
     names = zf.namelist()
     csv_names = [n for n in names if n.endswith(".csv")]
@@ -256,7 +289,7 @@ def parse_package(content):
                     if image_key(blob) != key:
                         raise ValidationError("Eine Bilddatei passt nicht zu ihrer Referenz.")
                     images[key] = blob
-                progress, aliases = {}, {}
+                progress, aliases, crown_records = {}, {}, []
                 if "userdata.json" in seen:
                     private = json.loads(zf.read("userdata.json").decode("utf-8"))
                     if not isinstance(private, dict) or private.get("format") != "mh-wilds-userdata" or private.get("version") != 1:
@@ -265,7 +298,16 @@ def parse_package(content):
                         raise ValidationError("Ungültige Nutzerdaten im Backup.")
                     progress = {identifier(k): validate_progress(v) for k, v in private["progress"].items()}
                     aliases = {identifier(k): identifier(v) for k, v in private.get("aliases", {}).items()}
+                    crown_records = validate_crown_backup(private.get('crowns', []))
+                    for monster in crown_records:
+                        if monster['icon']:
+                            key = monster['icon']
+                            blob = zf.read(f'images/{key}')
+                            if image_key(blob) != key:
+                                raise ValidationError('Ein Monsterbild passt nicht zur Referenz.')
+                            images[key] = blob
                 parsed = {"quests": quests, "images": images, "progress": progress, "aliases": aliases, "catalogs": records, "catalog_id_aliases": validated_aliases, "source": "Privates Backup" if "userdata.json" in seen else "Questliste", "warnings": []}
+                parsed['crowns'] = crown_records
             ids = [q["id"] for q in parsed["quests"]]
             if len(ids) > 1000 or len(ids) != len(set(ids)):
                 raise ValidationError("Die Questliste enthält zu viele Quests oder doppelte IDs.")
@@ -316,6 +358,15 @@ class Tracker:
                     db.execute(f"DELETE FROM {table} WHERE kind='tag'")
                 catalogs.refresh_quests(db)
             db.execute("PRAGMA main.user_version = 3")
+            db.execute("CREATE TABLE IF NOT EXISTS crown_monsters (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, source TEXT NOT NULL DEFAULT '')")
+            db.execute("CREATE TABLE IF NOT EXISTS personal.crowns (monster_id TEXT PRIMARY KEY, small INTEGER NOT NULL DEFAULT 0, gold INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS tracker_features (name TEXT PRIMARY KEY)")
+            if not db.execute("SELECT 1 FROM tracker_features WHERE name='crowns'").fetchone():
+                for position, monster in enumerate(json.loads((ROOT / 'seed/crowns.json').read_text(encoding='utf-8'))):
+                    key = self.save_image((ROOT / 'seed/icons' / monster['icon']).read_bytes())
+                    db.execute("INSERT INTO crown_monsters VALUES (?,?,?,?)", (monster['id'], monster['name'], key, monster['source']))
+                    db.execute("INSERT OR IGNORE INTO personal.crowns (monster_id,position) VALUES (?,?)", (monster['id'], position))
+                db.execute("INSERT INTO tracker_features VALUES ('crowns')")
             if db.execute('PRAGMA personal.user_version').fetchone()[0] != 1:
                 db.execute("PRAGMA personal.user_version = 1")
 
@@ -336,8 +387,54 @@ class Tracker:
             for q in quests:
                 q["progress"] = states.get(q["id"], {"first_clear": False, "all_rewards": False})
             groups = catalogs.grouped(db)
-            return {"quests": quests, "catalogs": groups, "reward_types": [r['name'] for r in groups['reward_type']],
+            crowns = [dict(zip(('id', 'name', 'icon', 'source', 'small', 'gold'), row)) for row in db.execute(
+                "SELECT m.id,m.name,m.icon,m.source,COALESCE(c.small,0),COALESCE(c.gold,0) FROM crown_monsters m LEFT JOIN personal.crowns c ON c.monster_id=m.id ORDER BY COALESCE(c.position,2147483647),m.rowid")]
+            for monster in crowns:
+                monster['small'], monster['gold'] = bool(monster['small']), bool(monster['gold'])
+            return {"quests": quests, "crowns": crowns, "catalogs": groups, "reward_types": [r['name'] for r in groups['reward_type']],
                     "monster_types": [r['name'] for r in groups['state']], "ranks": [r['name'] for r in groups['rank']]}
+
+    def save_crown_monster(self, raw, create=False):
+        mid = str(uuid.uuid4()) if create else identifier(raw.get('id'))
+        name = text_value(raw.get('name'), 'Monstername', 200, True)
+        key = raw.get('icon')
+        if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[a-f0-9]{64}\.(png|jpg|gif|webp)', key) or not (self.images / key).is_file()):
+            raise ValidationError('Ungültiges oder fehlendes Monsterbild.')
+        with self.lock, self.connect() as db:
+            if not create and not db.execute('SELECT 1 FROM crown_monsters WHERE id=?', (mid,)).fetchone():
+                raise ValidationError('Monster wurde nicht gefunden.')
+            if any(other != mid and normalized(value) == normalized(name) for other, value in db.execute('SELECT id,name FROM crown_monsters')):
+                raise ValidationError('Dieses Monster ist bereits im Kronen-Tracker vorhanden.')
+            if create:
+                db.execute('INSERT INTO crown_monsters (id,name,icon) VALUES (?,?,?)', (mid, name, key))
+                position = db.execute('SELECT COALESCE(MAX(position),-1)+1 FROM personal.crowns').fetchone()[0]
+                db.execute('INSERT INTO personal.crowns (monster_id,position) VALUES (?,?)', (mid, position))
+            else:
+                db.execute('UPDATE crown_monsters SET name=?,icon=? WHERE id=?', (name, key, mid))
+        return {'id': mid, 'name': name, 'icon': key}
+
+    def set_crown_progress(self, mid, raw):
+        mid = identifier(mid)
+        if not isinstance(raw, dict) or any(not isinstance(raw.get(k), bool) for k in ('small', 'gold')):
+            raise ValidationError('Ungültiger Kronenfortschritt.')
+        with self.lock, self.connect() as db:
+            if not db.execute('SELECT 1 FROM crown_monsters WHERE id=?', (mid,)).fetchone():
+                raise ValidationError('Monster wurde nicht gefunden.')
+            position = db.execute('SELECT COALESCE(MAX(position),-1)+1 FROM personal.crowns').fetchone()[0]
+            db.execute('INSERT INTO personal.crowns VALUES (?,?,?,?) ON CONFLICT(monster_id) DO UPDATE SET small=excluded.small,gold=excluded.gold', (mid, raw['small'], raw['gold'], position))
+        return {'small': raw['small'], 'gold': raw['gold']}
+
+    def reorder_crowns(self, ids):
+        if not isinstance(ids, list):
+            raise ValidationError('Ungültige Monsterreihenfolge.')
+        ids = [identifier(mid) for mid in ids]
+        with self.lock, self.connect() as db:
+            existing = {row[0] for row in db.execute('SELECT id FROM crown_monsters')}
+            if len(ids) != len(existing) or set(ids) != existing:
+                raise ValidationError('Die Reihenfolge muss jedes Monster genau einmal enthalten. Bitte neu laden.')
+            for position, mid in enumerate(ids):
+                db.execute('INSERT INTO personal.crowns (monster_id,position) VALUES (?,?) ON CONFLICT(monster_id) DO UPDATE SET position=excluded.position', (mid, position))
+        return {'ok': True}
 
     def save_image(self, content):
         key = image_key(content)
@@ -385,9 +482,10 @@ class Tracker:
             records = catalogs.all_records(db)
             id_aliases = [{'foreign_id': row[0], 'kind': row[1], 'target_id': row[2]} for row in db.execute('SELECT * FROM catalog_id_aliases')]
             buffer = io.BytesIO()
+            crown_records = self.state()['crowns'] if private else []
             with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("catalog.json", json.dumps({"format": "mh-wilds-quests", "version": 2, "quests": quests, "catalogs": records, "catalog_id_aliases": id_aliases}, ensure_ascii=False, indent=2))
-                for key in sorted({i for q in quests for i in q["images"]} | {r['icon'] for r in records if r.get('icon')}):
+                for key in sorted({i for q in quests for i in q["images"]} | {r['icon'] for r in records if r.get('icon')} | {m['icon'] for m in crown_records if m.get('icon')}):
                     path = self.images / key
                     if not path.is_file():
                         raise ValidationError("Ein Bild fehlt. Export wurde abgebrochen.")
@@ -395,7 +493,7 @@ class Tracker:
                 if private:
                     progress = {r[0]: {"first_clear": bool(r[1]), "all_rewards": bool(r[2])} for r in db.execute("SELECT * FROM personal.progress")}
                     aliases = dict(db.execute("SELECT foreign_id, quest_id FROM personal.aliases"))
-                    zf.writestr("userdata.json", json.dumps({"format": "mh-wilds-userdata", "version": 1, "progress": progress, "aliases": aliases}, indent=2))
+                    zf.writestr("userdata.json", json.dumps({"format": "mh-wilds-userdata", "version": 1, "progress": progress, "aliases": aliases, "crowns": crown_records}, ensure_ascii=False, indent=2))
             return buffer.getvalue()
 
     def preview(self, content):
@@ -427,7 +525,7 @@ class Tracker:
                 self.previews.pop(next(iter(self.previews)))
             token = secrets.token_urlsafe(24)
             self.previews[token] = (now, package, rows)
-            return {"token": token, "source": package["source"], "has_progress": bool(package["progress"]), "catalog_count": len(package['catalogs']), "rows": rows, "warnings": package["warnings"]}
+            return {"token": token, "source": package["source"], "has_progress": bool(package["progress"] or package.get('crowns')), "crown_count": len(package.get('crowns', [])), "catalog_count": len(package['catalogs']), "rows": rows, "warnings": package["warnings"]}
 
     def commit(self, token, choices, restore_progress=False, update_catalogs=False):
         with self.lock:
@@ -465,7 +563,8 @@ class Tracker:
                     q["id"] = local_id
                     operations.append((foreign_id, q, choice))
                 # Images are content-addressed; writing them first avoids DB references to absent files.
-                for key in {i for _, q, _ in operations for i in q["images"]} | {r['icon'] for r in package['catalogs'] if r.get('icon')}:
+                crown_icons = {m['icon'] for m in package.get('crowns', []) if m.get('icon')} if restore_progress else set()
+                for key in {i for _, q, _ in operations for i in q["images"]} | {r['icon'] for r in package['catalogs'] if r.get('icon')} | crown_icons:
                     self.save_image(package["images"][key])
                 catalogs.import_records(db, package['catalogs'], update_catalogs)
                 for alias in package['catalog_id_aliases']:
@@ -485,6 +584,13 @@ class Tracker:
                         p = package["progress"][foreign_id]
                         db.execute("INSERT OR REPLACE INTO personal.progress VALUES (?,?,?)", (q["id"], p["first_clear"], p["all_rewards"]))
                 if restore_progress:
+                    crown_records = package.get('crowns', [])
+                    # Keep monsters absent from a backup after its restored order.
+                    offset = len(crown_records)
+                    db.execute('UPDATE personal.crowns SET position=position+?', (offset,))
+                    for position, monster in enumerate(crown_records):
+                        db.execute('INSERT INTO crown_monsters VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,icon=excluded.icon,source=excluded.source', (monster['id'], monster['name'], monster['icon'], monster['source']))
+                        db.execute('INSERT OR REPLACE INTO personal.crowns VALUES (?,?,?,?)', (monster['id'], monster['small'], monster['gold'], position))
                     for foreign_id, target in package["aliases"].items():
                         local_id = remap.get(target)
                         if local_id and foreign_id not in existing and foreign_id not in destinations:
@@ -613,7 +719,7 @@ def make_handler(tracker, csrf, lifetime=None):
                     self.send(200, tracker.export(private), "application/zip", "wilds-privates-backup.zip" if private else "wilds-questliste.zip")
                 elif path in ("/", "/index.html"):
                     self.send(200, (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__TRACKER_TOKEN__", csrf).encode("utf-8"), "text/html; charset=utf-8")
-                elif path in ("/app.js", "/style.css", "/favicon.svg", "/favicon.ico", "/logo.png"):
+                elif path in ("/app.js", "/style.css", "/favicon.svg", "/favicon.ico", "/logo.png", "/crown-small.png", "/crown-gold.png"):
                     file = ROOT / "web" / path[1:]
                     self.send(200, file.read_bytes(), mimetypes.guess_type(file.name)[0] or "application/octet-stream")
                 elif re.fullmatch(r"/images/[a-f0-9]{64}\.(png|jpg|gif|webp)", path):
@@ -642,6 +748,12 @@ def make_handler(tracker, csrf, lifetime=None):
                 self.send(200, {"ok": True})
             elif path == "/api/progress":
                 self.send(200, tracker.set_progress(raw.get("id"), raw.get("progress")))
+            elif path in ('/api/crowns/create', '/api/crowns/save'):
+                self.send(200, tracker.save_crown_monster(raw, path.endswith('create')))
+            elif path == '/api/crowns/progress':
+                self.send(200, tracker.set_crown_progress(raw.get('id'), raw.get('progress')))
+            elif path == '/api/crowns/order':
+                self.send(200, tracker.reorder_crowns(raw.get('ids')))
             elif path in ("/api/catalog/create", "/api/catalog/save"):
                 self.send(200, tracker.save_catalog(raw, path.endswith('create')))
             elif path == "/api/catalog/merge":
@@ -696,7 +808,7 @@ def make_handler(tracker, csrf, lifetime=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
+    parser.add_argument("--data-dir", type=Path, default=default_data_directory())
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--auto-stop", action="store_true", help="Nach Schließen des letzten Browser-Tabs automatisch beenden")
     parser.add_argument("--import-notion", type=Path, help="Einmaligen Notion-Erstimport ausführen und beenden")
@@ -716,7 +828,8 @@ def main():
         preview = tracker.preview(seed.read_bytes())
         tracker.commit(preview["token"], {r["quest"]["id"]: "add" for r in preview["rows"]})
     token = secrets.token_urlsafe(32)
-    lifetime = BrowserLifetime() if args.auto_stop else None
+    auto_stop = args.auto_stop or (getattr(sys, 'frozen', False) and not args.no_browser)
+    lifetime = BrowserLifetime() if auto_stop else None
     try:
         server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(tracker, token, lifetime))
     except OSError:

@@ -1,0 +1,2 @@
+# Only needed on the build machine; release users do not need Python or pip.
+PyInstaller==6.22.3

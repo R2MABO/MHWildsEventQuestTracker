@@ -1,5 +1,2 @@
-- Crown-Tracker
-- Gebiete hinzufügen
-
 - UI Localisation - English
 - Questliste/Stammdaten Englischen Datensatz machen

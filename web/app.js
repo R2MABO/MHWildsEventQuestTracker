@@ -201,7 +201,11 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-let state = { quests: [], reward_types: [], monster_types: [], ranks: [], catalogs: {} };
+let state = { quests: [], crowns: [], reward_types: [], monster_types: [], ranks: [], catalogs: {} };
+let trackerView = location.hash === '#crowns' ? 'crowns' : 'quests';
+let crownEditing = false;
+let crownSaving = false;
+let crownDragging = null;
 const questSort = { column: null, direction: 1 };
 let editing = null;
 let draftImages = [];
@@ -215,7 +219,7 @@ let csrf = document.querySelector('meta[name="tracker-token"]').content;
 let serverOnline = true;
 let checkingConnection = false;
 const offlineMessage = 'Server nicht erreichbar. Bearbeitung und Speichern sind gesperrt. Starte den Tracker erneut. Deine offenen Eingaben bleiben erhalten.';
-const serverControls = '#editor .dialog-body, #entity-dialog .dialog-body, #merge-dialog .dialog-body, #import-dialog .dialog-body, #save-quest, #delete-quest, #entity-save, #merge-save, #commit-import, #new-quest, #create-menu, #import-button, #export-button, #backup-button, #catalog-add, .catalog-actions, .status-cell, .quest-edit';
+const serverControls = '#editor .dialog-body, #entity-dialog .dialog-body, #merge-dialog .dialog-body, #import-dialog .dialog-body, #save-quest, #delete-quest, #entity-save, #merge-save, #commit-import, #new-quest, #create-menu, #import-button, #export-button, #backup-button, #catalog-add, .catalog-actions, .status-cell, .quest-edit, #new-crown-monster, #crown-backup, #crown-import, .crown-card';
 function updateConnectionControls() {
   document.querySelectorAll(serverControls).forEach(node => { node.inert = !serverOnline; });
 }
@@ -415,6 +419,7 @@ async function loadState() {
   refreshEditorCatalogs();
   if ($('catalog-dialog').open) renderCatalogs();
   render();
+  renderCrowns();
 }
 function refreshEditorCatalogs() {
   catalogOptions($('quest-rank'), 'rank');
@@ -823,7 +828,7 @@ async function previewImport() {
   if (file.size > 120 * 1024 * 1024) { toast('ZIP darf höchstens 120 MB groß sein.', true); return; }
   await safely(() => busy('Questliste wird geprüft …', async () => {
     importPreview = await api('/api/import/preview', await file.arrayBuffer(), true);
-    $('import-summary').textContent = `${file.name} · ${importPreview.rows.length} Quests · ${importPreview.catalog_count} Stammdateneinträge · ${importPreview.source}`;
+    $('import-summary').textContent = `${file.name} · ${importPreview.rows.length} Quests · ${importPreview.catalog_count} Stammdateneinträge${importPreview.crown_count ? ` · ${importPreview.crown_count} Kronenmonster` : ''} · ${importPreview.source}`;
     $('update-catalogs').checked = false;
     $('restore-option').hidden = !importPreview.has_progress;
     $('restore-progress').checked = false;
@@ -919,6 +924,7 @@ function renderEntityIcon() {
 }
 function openEntity(kind, record=null, callback=null) {
   if (!serverOnline) { setServerOnline(false); return; }
+  crownEditing=false;
   entityKind=kind; entityEditing=record; entityCallback=callback; entityIcon=record?.icon || null;
   $('entity-form').reset();
   $('entity-title').textContent=`${catalogLabels[kind]} ${record ? 'bearbeiten' : 'anlegen'}`;
@@ -947,7 +953,7 @@ async function saveEntity(event) {
     if (entityKind==='rank') { raw.stars_min=$('entity-stars-min').value ? Number($('entity-stars-min').value) : null; raw.stars_max=$('entity-stars-max').value ? Number($('entity-stars-max').value) : null; }
     $('entity-save').disabled=true;
     try {
-      const result=await api(entityEditing ? '/api/catalog/save' : '/api/catalog/create',raw);
+      const result=await api(crownEditing ? (entityEditing ? '/api/crowns/save' : '/api/crowns/create') : (entityEditing ? '/api/catalog/save' : '/api/catalog/create'),raw);
       $('entity-dialog').close(); await loadState();
       entityCallback?.(result); toast(`${catalogLabels[entityKind]} gespeichert.`);
     } finally { $('entity-save').disabled=false; }
@@ -1188,8 +1194,126 @@ $('import-new').addEventListener('click', () => {
 });
 document.addEventListener('keydown', event => {
   if ($('image-dialog').open && ['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); moveImage(event.key === 'ArrowLeft' ? -1 : 1); }
-  if (event.key === '/' && !document.querySelector('dialog[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) { event.preventDefault(); $('search').focus(); }
+  if (event.key === '/' && !document.querySelector('dialog[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) { event.preventDefault(); $(trackerView === 'crowns' ? 'crown-search' : 'search').focus(); }
 });
+// Keep each tracker's search and filters independent when switching views.
+const questFilters = el('div', {id:'quest-filters'});
+const filterStart = document.querySelector('.filter-head');
+filterStart.before(questFilters);
+let filterNode = filterStart;
+while (filterNode && !filterNode.classList.contains('sidebar-footer')) {
+  const next = filterNode.nextElementSibling;
+  questFilters.append(filterNode);
+  filterNode = next;
+}
+const crownStatus = el('select', {id:'crown-status', onchange:renderCrowns}, [
+  ...[['', 'Alle Monster'], ['none', 'Noch keine Krone'], ['small', 'Nur kleine Krone'], ['gold', 'Nur goldene Krone'], ['complete', 'Beide Kronen · fertig']].map(([value,text])=>el('option',{value,text}))
+]);
+const crownFilters = el('div', {id:'crown-filters', hidden:true}, [
+  el('div',{class:'filter-head'},[el('h2',{text:'Filter'}),el('button',{type:'button',class:'text-button',text:'Zurücksetzen',onclick:()=>{crownStatus.value='';$('crown-search').value='';renderCrowns();}})]),
+  el('label',{class:'field-label',htmlFor:'crown-status',text:'Kronenfortschritt'}), crownStatus
+]);
+questFilters.after(crownFilters);
+
+function switchTracker(view) {
+  trackerView=view;
+  const crowns=view==='crowns';
+  $('quest-view').hidden=crowns;
+  $('crown-view').hidden=!crowns;
+  questFilters.hidden=crowns;
+  crownFilters.hidden=!crowns;
+  document.querySelector('.sidebar').setAttribute('aria-label',crowns ? 'Kronenfilter' : 'Questfilter');
+  $('manage-catalogs').hidden=crowns;
+  document.querySelector('.brand small').textContent=crowns ? 'CROWN TRACKER' : 'QUEST TRACKER';
+  document.querySelector('.brand').setAttribute('aria-label', `Wilds ${crowns ? 'Crown' : 'Quest'} Tracker Startseite`);
+  document.title=`Wilds · ${crowns ? 'Crown' : 'Quest'} Tracker`;
+  for (const [id,active] of [['nav-quests',!crowns],['nav-crowns',crowns]]) {
+    $(id).classList.toggle('nav-active',active);
+    if (active) $(id).setAttribute('aria-current','page'); else $(id).removeAttribute('aria-current');
+  }
+  renderCrowns();
+}
+
+function openCrownMonster(monster=null) {
+  openEntity('monster',monster);
+  crownEditing=true;
+}
+
+async function moveCrown(sourceId,targetId) {
+  if (crownSaving || !serverOnline || sourceId===targetId) return;
+  const order=state.crowns.map(m=>m.id);
+  const source=order.indexOf(sourceId);
+  const target=order.indexOf(targetId);
+  if (source<0 || target<0) return;
+  order.splice(source,1);
+  order.splice(target,0,sourceId);
+  crownSaving=true;
+  try {
+    await api('/api/crowns/order',{ids:order});
+    const monsters=new Map(state.crowns.map(m=>[m.id,m]));
+    state.crowns=order.map(id=>monsters.get(id));
+    renderCrowns();
+    $('crown-list').querySelector(`[data-monster-id="${sourceId}"] .crown-drag`).focus();
+    toast('Monsterreihenfolge gespeichert.');
+  } catch(error) { toast(error.message,true); }
+  finally { crownSaving=false; }
+}
+
+function crownMatches(monster) {
+  const status=crownStatus.value;
+  const normalize=text=>text.normalize('NFKD').toLocaleLowerCase('de').replace(/[^\p{L}\p{N}]/gu,'');
+  return normalize(monster.name).includes(normalize($('crown-search').value)) &&
+    (!status || (status==='none' && !monster.small && !monster.gold) || (status==='small' && monster.small && !monster.gold) ||
+    (status==='gold' && monster.gold && !monster.small) || (status==='complete' && monster.small && monster.gold));
+}
+
+function renderCrowns() {
+  const monsters=state.crowns || [];
+  const total=monsters.length;
+  $('crown-nav-count').textContent=total;
+  $('crown-stat-total').textContent=`${total} Monster im Kronenkatalog`;
+  for (const kind of ['small','gold','complete']) {
+    const count=monsters.filter(m=>kind==='complete' ? m.small && m.gold : m[kind]).length;
+    $(`crown-stat-${kind}`).replaceChildren(String(count),el('span',{text:`/ ${total}`}));
+    if (kind!=='complete') $(`crown-${kind}-bar`).style.width=`${total ? count/total*100 : 0}%`;
+  }
+  const visible=monsters.filter(crownMatches);
+  $('crown-result-count').textContent=`${visible.length} von ${total} Monstern`;
+  $('crown-list').replaceChildren(...visible.map(monster=>{
+    const handle=el('button',{type:'button',class:'icon-button crown-drag',text:'⠿',draggable:true,'aria-label':`${monster.name} verschieben`,title:'Ziehen oder mit Pfeiltasten verschieben',
+      ondragstart:event=>{if(crownSaving || !serverOnline){event.preventDefault();return;} crownDragging=monster.id;event.dataTransfer.setData('text/plain',monster.id);event.dataTransfer.effectAllowed='move';},
+      ondragend:()=>{crownDragging=null;document.querySelectorAll('.drop-target').forEach(n=>n.classList.remove('drop-target'));},
+      onkeydown:event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();const delta=['ArrowLeft','ArrowUp'].includes(event.key) ? -1 : 1;const target=visible[visible.indexOf(monster)+delta];if(target)moveCrown(monster.id,target.id);}
+    });
+    const checks=el('div',{class:'crown-checks'},['small','gold'].map(kind=>{
+      const checkbox=el('input',{type:'checkbox',checked:monster[kind],onchange:async()=>{
+        const desired={small:monster.small,gold:monster.gold,[kind]:checkbox.checked};
+        checks.inert=true;
+        try { const saved=await api('/api/crowns/progress',{id:monster.id,progress:desired});Object.assign(monster,saved);renderCrowns(); }
+        catch(error){checkbox.checked=monster[kind];toast(error.message,true);}
+        finally {checks.inert=false;}
+      }});
+      return el('label',{class:'crown-check'},[checkbox,el('img',{src:`/crown-${kind}.png`,alt:''}),el('span',{text:kind==='small' ? 'Kleine Krone' : 'Goldene Krone'})]);
+    }));
+    const card=el('article',{class:`crown-card${monster.small && monster.gold ? ' crown-complete' : ''}`,'data-monster-id':monster.id,
+      ondragover:event=>{if(!crownDragging || crownSaving)return;event.preventDefault();event.dataTransfer.dropEffect='move';card.classList.add('drop-target');},
+      ondragleave:event=>{if(!card.contains(event.relatedTarget))card.classList.remove('drop-target');},
+      ondrop:event=>{event.preventDefault();card.classList.remove('drop-target');if(!crownDragging)return;moveCrown(crownDragging,monster.id);crownDragging=null;}
+    },[el('div',{class:'crown-card-tools'},[handle,el('button',{type:'button',class:'icon-button','aria-label':`${monster.name} bearbeiten`,onclick:()=>openCrownMonster(monster)},[icon('edit')])]),monsterGlyph(monster),el('h3',{text:monster.name}),checks]);
+    return card;
+  }));
+  if (!visible.length) $('crown-list').append(el('div',{class:'empty-state'},[el('h3',{text:'Keine passenden Monster'}),el('p',{text:'Passe deine Suche oder den Kronenfilter an.'})]));
+  updateConnectionControls();
+}
+$('nav-quests').addEventListener('click',()=>{location.hash='quests';switchTracker('quests');});
+$('nav-crowns').addEventListener('click',()=>{location.hash='crowns';switchTracker('crowns');});
+window.addEventListener('hashchange',()=>switchTracker(location.hash==='#crowns' ? 'crowns' : 'quests'));
+$('crown-search').addEventListener('input',renderCrowns);
+$('new-crown-monster').addEventListener('click',()=>openCrownMonster());
+$('crown-backup').addEventListener('click',()=>downloadPackage(true));
+$('crown-import').addEventListener('click',()=>$('import-input').click());
+switchTracker(trackerView);
+
 safely(async () => {
   try { await loadState(); } catch (error) {
     $('result-count').textContent = 'Verbindung unterbrochen';

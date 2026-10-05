@@ -1,5 +1,10 @@
 # Monster-Icons
 
+Kronen-UI: [MHWiki Monster UI Icons](https://monsterhunterwiki.org/wiki/Category:MHWiki_Monster_UI_Icons)
+
+- [Kleine Krone](https://monsterhunterwiki.org/wiki/File:MHWI-Small_Crown.png) → `web/crown-small.png`
+- [Goldene Krone](https://monsterhunterwiki.org/wiki/File:MHWI-Gold_Crown.png) → `web/crown-gold.png`
+
 Quelle: https://monsterhunterwiki.org/wiki/Category:MHWilds_Monster_Icons
 
 Die Spielgrafiken gehören Capcom. Lokal heruntergeladene Wiki-Dateien für diesen Fan-Tracker.

@@ -1,8 +1,36 @@
 # Wilds · Quest Tracker
 
-Lokaler Eventquest-Tracker für Monster Hunter Wilds. HTML/CSS/JavaScript im normalen Browser, Python und SQLite für die Speicherung. Keine Cloud, keine Anmeldung, keine zusätzlichen Python-Pakete und keine externen Schriftarten oder CDN-Abhängigkeiten.
+Lokaler Eventquest- und Kronen-Tracker für Monster Hunter Wilds. HTML/CSS/JavaScript im normalen Browser, Python und SQLite für die Speicherung. Keine Cloud, keine Anmeldung und keine externen Schriftarten oder CDN-Abhängigkeiten. Die nativen ZIP-Builds enthalten die Python-Laufzeit; eine Python-Installation ist dafür nicht erforderlich.
+
+## Monster Kronen
+
+Links unter **Eventquests** öffnet **Monster Kronen** den Crown Tracker. Er enthält ausschließlich die 29 Monster aus dem bereitgestellten Notion-Kronenexport; neue Installationen beginnen ohne persönliche Kronen. Jede Karte zeigt ein Monster-Icon und unabhängige Checkboxen für die kleine und die goldene Krone.
+
+Die Suche findet Monsternamen auch ohne Bindestriche. Der Fortschrittsfilter zeigt alle Monster, keine Krone, nur kleine, nur goldene oder beide Kronen. Karten am Griff ziehen, um sie vor oder hinter einer anderen Karte einzuordnen. Alternativ den Griff fokussieren und die Pfeiltasten verwenden. Das funktioniert auch bei aktiver Suche oder Filterung; ausgeblendete Monster bleiben in der Gesamtreihenfolge erhalten. Fortschritt und Reihenfolge liegen in `userdata.sqlite` und bleiben bei Browserwechsel erhalten.
+
+**Monster anlegen** öffnet ein Formular für Name und ein optionales eigenes Bild (PNG, JPEG, WebP oder GIF). Der Stift auf einer Karte bearbeitet Name und Bild. Diese Monster sind unabhängig von den Quest-Stammdaten. Private Backups enthalten Kronenmonster, Bilder, Kronen und Reihenfolge; beim Import die Option zur Übernahme persönlichen Fortschritts aktivieren. Öffentliche Questlisten enthalten keinen Kronenfortschritt.
+
+Die Kronen-Icons stammen aus [MHWiki Monster UI Icons](https://monsterhunterwiki.org/wiki/Category:MHWiki_Monster_UI_Icons) und werden offline aus dem Projekt geladen. Die Monster-Icons verwenden den bereits vorhandenen Wilds-Wiki-Katalog. Quellen stehen in `seed/ICON_SOURCES.md`.
+
+Der persönliche Notion-Fortschritt kann bei Bedarf erneut übernommen werden: `python tools/import_crowns.py "Pfad/zum/Export.zip" --data-dir data`. Dies überschreibt die Kronenhäkchen der 29 Exportmonster. `--build-seed` erzeugt ausschließlich die öffentliche Monsterliste ohne persönliche Häkchen.
 
 ## Starten
+
+### Native ZIP-Builds (ohne Python-Installation)
+
+Die passende ZIP vollständig in einen beschreibbaren Ordner entpacken:
+
+- **Windows:** `wilds-quest-tracker-windows.zip` → `WildsQuestTracker.exe` doppelklicken.
+- **Linux:** `wilds-quest-tracker-linux.zip` → `./WildsQuestTracker` starten. Falls das Entpackprogramm die Ausführungsrechte entfernt: einmalig `chmod +x WildsQuestTracker`.
+- **macOS:** `wilds-quest-tracker-macos.zip` → `WildsQuestTracker.app` doppelklicken.
+
+Der Standardbrowser öffnet sich automatisch. Nach dem Schließen des letzten Tracker-Tabs beendet sich die native Anwendung nach acht Sekunden. Unter Windows/Linux erscheint ein Konsolenfenster, das ebenfalls zum Beenden geschlossen werden kann. Die macOS-App protokolliert Startfehler unter `data/tracker-start.log`.
+
+Der persönliche `data/`-Ordner entsteht neben der EXE, Linux-Datei bzw. macOS-App, außerhalb der eingebetteten Ressourcen. Beim Update diesen Ordner behalten; vorhandene Daten einer Quellcode-Version können bei beendetem Tracker dorthin kopiert werden. `--data-dir` bleibt verfügbar. Mit `--no-browser` läuft die Anwendung dauerhaft, sofern nicht zusätzlich `--auto-stop` angegeben wird.
+
+Die GitHub-Builds sind für Windows/Linux x64 und macOS Intel x64 ausgelegt (auf Apple Silicon mit Rosetta). Lokale Builds verwenden die Architektur des Build-Rechners; sie steht in `BUILD.txt`. Der Linux-Build entsteht auf Ubuntu 22.04 und setzt eine kompatible Linux-Umgebung mit glibc 2.35 oder neuer voraus. Die macOS-App ist nicht mit einem Apple-Entwicklerzertifikat signiert oder notarisiert; macOS kann beim ersten Start eine Freigabe unter **Datenschutz & Sicherheit** verlangen.
+
+### Quellcode starten
 
 Voraussetzung: **Python 3.10 oder neuer** von [python.org](https://www.python.org/downloads/). Unter Windows „Add Python to PATH“ aktivieren. Den gesamten Projektordner aufbewahren, nicht nur die HTML-Datei.
 
@@ -20,15 +48,15 @@ Direktstart: `python3 app.py` beziehungsweise `py -3 app.py`. `--no-browser` ver
 
 Bei einem Verbindungsabbruch erscheint oben mittig dauerhaft „Server nicht erreichbar“, auch über geöffneten Dialogen. Bearbeitung, Fortschritt und Speichern werden gesperrt; offene Eingaben bleiben im Tab erhalten. Den Tracker erneut starten: Die Seite prüft die Verbindung automatisch und gibt die Bearbeitung wieder frei. Der Hinweis funktioniert auch beim Konsolenstart. Ungespeicherte Entwürfe werden dadurch nicht automatisch gespeichert; nach der Wiederverbindung selbst speichern und den Tab bis dahin geöffnet lassen.
 
-Das kompakte Logo oben links liegt unter `web/logo.png`. `web/favicon.ico` enthält dasselbe Motiv mit transparentem Hintergrund in 16, 24, 32, 48, 64, 128 und 256 Pixeln und liegt für Windows bereit. Die Oberfläche und das Browser-Icon verwenden `web/favicon.svg`, das das PNG direkt einbettet. Die ICO-Datei kann beim Erstellen einer Windows-EXE als Anwendungssymbol eingebunden werden. Der Windows-Starter ist eine BAT-Datei; dessen Dateisymbol lässt sich über eine Windows-Verknüpfung mit diesem ICO anpassen.
+Das kompakte Logo oben links liegt unter `web/logo.png`. `web/favicon.ico` enthält dasselbe Motiv mit transparentem Hintergrund in 16, 24, 32, 48, 64, 128 und 256 Pixeln. Die Oberfläche und das Browser-Icon verwenden `web/favicon.svg`, das das PNG direkt einbettet. Der Windows-Build bindet die ICO-Datei als EXE-Anwendungssymbol ein. Der Quellcode-Starter bleibt eine BAT-Datei.
 
 ## Daten und Privatsphäre
 
 ```
 data/
-  quests.sqlite       # Quests und Stammdaten ohne Häkchen
+  quests.sqlite       # Quests, Stammdaten und Kronenmonster ohne Häkchen
   images/             # Belohnungsbilder und Monster-Icons, über Inhalts-Hash referenziert
-  userdata.sqlite     # Persönliche Häkchen und bestätigte fremde Quest-IDs
+  userdata.sqlite     # Quest-/Kronenhäkchen, Monsterreihenfolge und bestätigte fremde Quest-IDs
 seed/
   catalog.zip         # Mitgelieferte erste Questliste, ohne Nutzerdaten
 ```
@@ -88,6 +116,16 @@ Einmaliger Erstimport per Terminal: `python3 app.py --import-notion PFAD_ZUR_ZIP
 
 Die Verbindungserkennung lässt sich zusätzlich mit `node --test tests/test_connection.js` prüfen. Diese Entwicklungstests benötigen Node.js; für den Betrieb des Trackers ist Node.js nicht erforderlich.
 
-`python3 tools/package_release.py` erstellt `dist/wilds-quest-tracker.zip` zum Weitergeben der gesamten Anwendung. Es enthält die Oberfläche, alle drei Starter und die öffentliche Startliste mit Bildern, aber keinen persönlichen Datenordner. Entpacken und den Starter für das jeweilige Betriebssystem nutzen.
+## Native Builds erstellen
+
+Auf dem Build-Rechner sind Python 3.10+ und PyInstaller erforderlich. Einmalig `python -m pip install -r tools/requirements-build.txt` ausführen (Linux/macOS: `python3`). Danach erstellt `python tools/package_release.py` immer **beide Varianten**: die bisherige plattformübergreifende Quellcode-ZIP `dist/wilds-quest-tracker.zip` und die native Anwendung für das **aktuelle** Betriebssystem in `dist/wilds-quest-tracker-windows.zip`, `dist/wilds-quest-tracker-linux.zip` bzw. `dist/wilds-quest-tracker-macos.zip`. Optional: `--output-dir PFAD`.
+
+Die Quellcode-ZIP enthält `start.bat` für Windows, `start.sh` für Linux und `start.command` für macOS sowie Anwendung, Oberfläche, öffentliche Startliste, Tests und Buildwerkzeuge. Sie benötigt beim Nutzer Python 3.10+. Persönliche Daten und `.python-path` bleiben ausgeschlossen. Mit `python tools/package_release.py --source-only` lässt sich diese Variante auch ohne PyInstaller erstellen. Falls der native Build fehlschlägt, bleibt die bereits erzeugte Quellcode-ZIP verfügbar.
+
+Unter Windows kann `tools/build.bat` doppelt angeklickt werden; damit werden die Quellcode-ZIP mit allen drei Startern und die Windows-ZIP mit EXE erstellt. Unter Linux/macOS `sh tools/build.sh` ausführen; dabei entstehen ebenfalls die Quellcode-ZIP und der jeweilige native Build. Die Skripte verwenden bevorzugt eine lokale `.venv-build`-Umgebung, sofern vorhanden. Diese lässt sich mit `python -m venv .venv-build` anlegen; darin die Build-Abhängigkeiten installieren.
+
+PyInstaller baut jeweils auf dem Zielbetriebssystem, nicht alle drei Plattformen auf Windows. Für alle drei nativen ZIPs enthält `.github/workflows/build.yml` den Workflow **Native ZIP builds**: nach dem Push in GitHub unter **Actions → Native ZIP builds → Run workflow** starten, oder einen Tag mit Präfix `v` pushen. Der Workflow testet und baut auf Windows, Linux und macOS und bietet die drei nativen ZIPs sowie einmal die Quellcode-ZIP als getrennte Download-Artefakte an. Bei GitHub-Artefakten gegebenenfalls zuerst die äußere Download-ZIP und dann die darin enthaltene Release-ZIP entpacken.
+
+Die nativen Release-ZIPs enthalten die ausführbare Anwendung, README, Lizenz und Build-Informationen. Oberfläche und öffentliche Startliste samt Icons sind eingebettet; persönliche Daten, lokale Python-Pfade und Starter-Skripte werden darin nicht ausgeliefert. Windows/Linux verwenden eine einzelne ausführbare Datei, macOS ein `.app`-Bundle. Der Workflow prüft jede frisch entpackte Anwendung auf Start, Ressourcen, saubere Kronen-Startdaten, den Datenordner und gespeicherten Fortschritt nach einem Neustart. Lokal: `python tools/smoke_release.py dist/wilds-quest-tracker-windows.zip` (bzw. die ZIP der eigenen Plattform).
 
 Das ZIP-Format ist versioniert (`mh-wilds-quests`, Version 2; Version 1 wird weiterhin eingelesen). Persönliche Daten sind gesondert versioniert (`mh-wilds-userdata`, Version 1). Keine externe API und kein Internetzugriff sind für den Betrieb erforderlich. `tools/fetch_monsters.py` lädt die Wiki-Icons bei Bedarf erneut und braucht dazu Internetzugriff; die ausgelieferte Anwendung enthält sie bereits. Inoffizielles Fanprojekt; Monster Hunter ist eine Marke von Capcom.

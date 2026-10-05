@@ -14,7 +14,7 @@
   <aside class="sidebar" aria-label="Questfilter">
     <div class="brand-header"><a class="brand" href="/" aria-label="Wilds Quest Tracker Startseite"><img src="/favicon.svg" alt="" width="32" height="48"><span>WILDS<small>QUEST TRACKER</small></span></a><button id="open-theme" class="icon-button theme-button" type="button" title="Theme bearbeiten" aria-label="Theme bearbeiten" aria-haspopup="dialog" aria-controls="theme-dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.5 1.5 0 0 1 1.1-2.5H17A4 4 0 0 0 21 11a9 9 0 0 0-9-8Z"/><circle cx="7.5" cy="10" r=".8"/><circle cx="10.5" cy="7" r=".8"/><circle cx="15" cy="7.5" r=".8"/></svg></button></div>
     <div class="sidebar-heading"><span>JÄGERNOTIZEN</span><span class="local-dot">Lokal</span></div>
-    <div class="nav-current"><span data-icon="book"></span><strong>Eventquests</strong><span id="nav-count" class="badge">–</span></div>
+    <nav class="tracker-nav" aria-label="Tracker wählen"><button id="nav-quests" class="nav-current" type="button" aria-current="page"><span data-icon="book"></span><strong>Eventquests</strong><span id="nav-count" class="badge">–</span></button><button id="nav-crowns" class="nav-current" type="button"><span data-icon="gem"></span><strong>Monster Kronen</strong><span id="crown-nav-count" class="badge">–</span></button></nav>
     <button id="manage-catalogs" class="button subtle nav-manage"><span data-icon="archive"></span>Stammdaten verwalten</button>
     <div class="filter-head"><h2>Filter</h2><button id="reset-filters" class="text-button" type="button">Zurücksetzen</button></div>
     <label class="field-label" for="filter-status">Fortschritt</label>
@@ -30,6 +30,7 @@
   </aside>
 
   <main>
+    <div id="quest-view">
     <header class="page-header"><div><div class="eyebrow">MONSTER HUNTER WILDS</div><h1>Eventquests<span class="title-dot">.</span></h1><p>Jagden planen. Belohnungen sammeln. Überblick behalten.</p></div><div class="create-actions"><button id="new-quest" class="button primary" aria-expanded="false" aria-controls="create-menu" aria-haspopup="menu"><span data-icon="plus"></span>Neu<span data-icon="chevron"></span></button><div id="create-menu" class="create-menu" role="menu" hidden></div></div></header>
     <section class="stats" aria-label="Dein Gesamtfortschritt">
       <article class="stat-card"><span class="stat-icon" data-icon="book"></span><div><span class="stat-label">Im Questkatalog</span><div class="stat-number" id="stat-total">–</div><small>Eventquests für deine nächste Jagd</small></div></article>
@@ -51,6 +52,22 @@
       <div id="quest-list" class="quest-list" aria-live="polite"></div>
       <div class="panel-footer"><span><span class="mini-dot"></span>Automatisch lokal gespeichert</span><span>Questliste und persönlicher Fortschritt sind getrennt.</span></div>
     </section>
+    </div>
+    <div id="crown-view" hidden>
+      <header class="page-header"><div><div class="eyebrow">MONSTER HUNTER WILDS</div><h1>Monster Kronen<span class="title-dot">.</span></h1><p>Kleine und goldene Kronen sammeln. Jede Jagd zählt.</p></div><button id="new-crown-monster" class="button primary" type="button"><span data-icon="plus"></span>Monster anlegen</button></header>
+      <section class="stats" aria-label="Dein Kronenfortschritt">
+        <article class="stat-card"><span class="stat-icon" data-icon="hunt"></span><div><span class="stat-label">Beide Kronen</span><div class="stat-number" id="crown-stat-complete">–</div><small id="crown-stat-total"></small></div></article>
+        <article class="stat-card"><img class="stat-crown" src="/crown-small.png" alt=""><div><span class="stat-label">Kleine Kronen</span><div class="stat-number" id="crown-stat-small">–</div><div class="progress-track"><div id="crown-small-bar"></div></div></div></article>
+        <article class="stat-card"><img class="stat-crown" src="/crown-gold.png" alt=""><div><span class="stat-label">Goldene Kronen</span><div class="stat-number" id="crown-stat-gold">–</div><div class="progress-track"><div id="crown-gold-bar"></div></div></div></article>
+      </section>
+      <section class="quest-panel" aria-label="Monsterkronen">
+        <div class="panel-heading"><div class="panel-title"><h2>Monsterkatalog</h2><span id="crown-result-count" class="muted"></span></div><div class="file-actions"><button id="crown-import" class="button subtle" type="button"><span data-icon="download"></span>Backup importieren</button><button id="crown-backup" class="icon-button" type="button" title="Privates Backup inklusive Kronen und Reihenfolge" aria-label="Privates Backup herunterladen"><span data-icon="archive"></span></button></div></div>
+        <div class="list-toolbar"><div class="search-wrap"><span data-icon="search"></span><input id="crown-search" type="search" placeholder="Monster suchen …" aria-label="Monster durchsuchen"><kbd>/</kbd></div></div>
+        <p class="crown-sort-help muted">Karten am Griff ziehen, um sie zu sortieren. Mit den Pfeiltasten am Griff geht es auch per Tastatur.</p>
+        <div id="crown-list" class="crown-grid" aria-live="polite"></div>
+        <div class="panel-footer"><span><span class="mini-dot"></span>Kronen und Reihenfolge automatisch lokal gespeichert</span></div>
+      </section>
+    </div>
     <footer class="page-footer">Für die nächste Jagd.<span>Inoffizieller, lokaler Fan-Tracker</span></footer>
   </main>
 
@@ -73,7 +90,7 @@
 
   <dialog id="import-dialog" class="import-dialog">
     <div class="dialog-header"><div><div class="eyebrow">QUESTLISTE AKTUALISIEREN</div><h2>Importvorschau</h2></div><button class="icon-button" data-close="import-dialog" aria-label="Import schließen"><span data-icon="close"></span></button></div>
-    <div class="dialog-body"><p id="import-summary"></p><p class="field-help">Gleiche IDs werden erkannt. Mögliche Duplikate bitte zuordnen; deine Entscheidung wird für spätere Updates gespeichert. Nicht enthaltene Quests bleiben erhalten.</p><div id="import-warnings" class="notice" hidden></div><label id="restore-option" class="restore-option" hidden><input id="restore-progress" type="checkbox"><span><strong>Persönlichen Fortschritt aus dieser Datei übernehmen</strong><small>Überschreibt die Häkchen der übernommenen Quests. Ohne Auswahl bleiben deine bisherigen Häkchen erhalten.</small></span></label><div class="import-bulk"><button class="text-button" id="import-new">Neue ohne Duplikat übernehmen</button><span id="import-counts" class="muted"></span></div><div id="import-rows"></div></div>
+    <div class="dialog-body"><p id="import-summary"></p><p class="field-help">Gleiche IDs werden erkannt. Mögliche Duplikate bitte zuordnen; deine Entscheidung wird für spätere Updates gespeichert. Nicht enthaltene Quests bleiben erhalten.</p><div id="import-warnings" class="notice" hidden></div><label id="restore-option" class="restore-option" hidden><input id="restore-progress" type="checkbox"><span><strong>Persönlichen Fortschritt aus dieser Datei übernehmen</strong><small>Übernimmt Quest-Häkchen sowie Kronenmonster, Kronen und ihre Reihenfolge aus privaten Backups. Ohne Auswahl bleibt dein bisheriger Fortschritt erhalten.</small></span></label><div class="import-bulk"><button class="text-button" id="import-new">Neue ohne Duplikat übernehmen</button><span id="import-counts" class="muted"></span></div><div id="import-rows"></div></div>
     <div class="import-catalog-option"><label><input id="update-catalogs" type="checkbox">Vorhandene Stammdaten aus der ZIP aktualisieren (Namen, Farben, Icons)</label><p class="field-help">Neue Einträge werden ergänzt. Ohne Auswahl bleiben vorhandene lokale Einstellungen erhalten.</p></div>
     <div class="dialog-footer"><button class="button" data-close="import-dialog">Abbrechen</button><button id="commit-import" class="button primary">Auswahl importieren</button></div>
   </dialog>

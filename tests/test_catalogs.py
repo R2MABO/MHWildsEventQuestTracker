@@ -239,14 +239,16 @@ class CatalogTests(unittest.TestCase):
             db.execute('INSERT INTO aliases VALUES (?,?)',(foreign,q['id']))
             db.execute('PRAGMA user_version=1')
             db.commit();db.close()
-            personal=(Path(directory)/'userdata.sqlite').read_bytes()
             tracker=Tracker(directory)
             actual=tracker.state()['quests'][0]
             self.assertEqual(actual['id'],q['id'])
             self.assertEqual(actual['targets'][0]['monster'],'Rey-Dau')
             self.assertEqual(actual['targets'][0]['type'],'Frenzy')
             self.assertTrue(actual['progress']['all_rewards'])
-            self.assertEqual((Path(directory)/'userdata.sqlite').read_bytes(),personal)
+            # Crown storage adds a table; existing quest progress and aliases stay intact.
+            with tracker.connect() as db:
+                self.assertEqual(db.execute('SELECT * FROM personal.progress').fetchall(), [(q['id'], 1, 1)])
+                self.assertEqual(db.execute('SELECT * FROM personal.aliases').fetchall(), [(foreign, q['id'])])
             self.assertTrue((Path(directory)/'migration-backup-v1/quests.sqlite').is_file())
 
     def test_identity_cannot_change_category_during_import(self):
