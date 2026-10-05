@@ -43,8 +43,53 @@ select:focus-visible{border-color:var(--gold);outline:1px solid var(--gold);outl
 .column-sort:hover .sort-indicator,.column-sort.is-sorted .sort-indicator{opacity:1}
 @media(max-width:760px){.table-head{display:flex;flex-wrap:wrap;gap:8px 16px;padding:9px 13px}.table-head>[data-sort-column="reward"]{display:flex}.table-head>span:last-child{display:none}.column-sort{min-height:30px;font-size:9px;letter-spacing:1px}}
 /* Use equal edge spacing and square previews, including empty placeholders. */
+.metadata-sorts{display:flex;flex-wrap:wrap;gap:10px 20px;min-width:0}.quest-metadata{display:flex;flex-wrap:wrap;gap:8px;min-width:0}.quest-metadata .pill{overflow-wrap:anywhere}.quest-metadata .area-pill{margin-inline-end:4px}
 .quest-row{--quest-thumb-size:88px;padding-block:6px;padding-left:6px}
 .quest-thumb{width:var(--quest-thumb-size);height:var(--quest-thumb-size);aspect-ratio:1;align-self:center}
 .quest-thumb img{position:absolute;inset:0}
 @media(max-width:1250px){.quest-row{--quest-thumb-size:76px}}
 @media(max-width:760px){.quest-row{padding-bottom:6px}.quest-rank,.quest-row>.quest-reward,.status-cell{padding-left:86px}}
+/* Keep rank, area and rewards compact with equal spacing. */
+@media(min-width:761px){.table-head,.quest-row{grid-template-columns:minmax(180px,1fr) var(--column-rank,110px) var(--column-area,110px) var(--column-reward,110px) 166px 30px;gap:7px}.table-head>[data-sort-column="rank"],.table-head>[data-sort-column="reward"],.metadata-sorts{justify-content:center}.quest-rank,.quest-reward{text-align:center;min-width:0}.quest-metadata,.quest-reward .reward-pills{justify-content:center}.quest-metadata .area-pill{margin-inline-end:0}}
+@media(min-width:1650px){.table-head,.quest-row{grid-template-columns:minmax(250px,1fr) var(--column-rank,120px) var(--column-area,120px) var(--column-reward,120px) 180px 35px;gap:10px}}
+@media(min-width:761px) and (max-width:1250px){.table-head,.quest-row{grid-template-columns:minmax(150px,1fr) var(--column-rank,95px) var(--column-area,95px) var(--column-reward,95px) 140px 30px;gap:5px}}
+@media(min-width:761px) and (max-width:1000px){.table-head,.quest-row{grid-template-columns:minmax(150px,1fr) repeat(2,80px) 140px 28px}}
+@media(max-width:760px){.quest-row>.quest-metadata{grid-column:1/-1;padding-left:86px}.metadata-sorts{gap:10px 20px}}
+/* Keep the initial group centered; the reward track includes the space before progress. */
+@media(min-width:1001px){.quest-panel{overflow-x:hidden}.table-head>[data-sort-column="reward"],.quest-row>.quest-reward{width:95px;max-width:100%;justify-self:start}.quest-panel.custom-columns .table-head,.quest-panel.custom-columns .quest-row{grid-template-columns:var(--column-name) var(--column-rank) var(--column-area) var(--column-reward) var(--column-progress) var(--column-actions)}}
+@media(min-width:1251px){.table-head,.quest-row{grid-template-columns:minmax(180px,calc((100% - 330px - 166px - var(--quest-actions-width) - 35px)/2)) 110px 110px minmax(110px,1fr) 166px var(--quest-actions-width)}.table-head>[data-sort-column="reward"],.quest-row>.quest-reward{width:110px}.quest-panel.custom-columns .table-head,.quest-panel.custom-columns .quest-row{grid-template-columns:var(--column-name) var(--column-rank) var(--column-area) var(--column-reward) var(--column-progress) var(--column-actions)}}
+@media(min-width:1650px){.table-head,.quest-row{grid-template-columns:minmax(250px,calc((100% - 360px - 180px - var(--quest-actions-width) - 50px)/2)) 120px 120px minmax(120px,1fr) 180px var(--quest-actions-width)}.table-head>[data-sort-column="reward"],.quest-row>.quest-reward{width:120px}.quest-panel.custom-columns .table-head,.quest-panel.custom-columns .quest-row{grid-template-columns:var(--column-name) var(--column-rank) var(--column-area) var(--column-reward) var(--column-progress) var(--column-actions)}}
+
+.table-head{position:relative}.column-resizer{position:absolute;top:0;bottom:0;width:12px;transform:translateX(-50%);cursor:col-resize;touch-action:none;z-index:2;outline-offset:-2px}.column-resizer:after{content:"";position:absolute;left:5px;top:10px;bottom:10px;width:2px;background:var(--line)}.column-resizer:hover:after,.column-resizer:focus-visible:after{background:var(--gold)}.resizing-columns,.resizing-columns *{cursor:col-resize!important;user-select:none!important}
+@media(max-width:1000px){.column-resizer{display:none}}
+/* Header and rows share the same grid origin; thumbnails keep their edge inset. */
+@media(min-width:1001px){.quest-row{padding-left:22px}.quest-thumb{margin-left:-16px}}
+@media(min-width:1001px) and (max-width:1250px){.quest-row{padding-left:16px}.quest-thumb{margin-left:-10px}}
+
+@media(min-width:1001px){.table-head>[data-sort-column="reward"],.quest-row>.quest-reward{width:auto;max-width:none;justify-self:stretch}.table-head>[data-sort-column="progress"]{justify-content:center;text-align:center}.status-cell{width:max-content;max-width:100%;justify-self:center;align-items:flex-start;min-width:0}.quest-edit{justify-self:end}.quest-reward{overflow-wrap:anywhere}.quest-main,.quest-text,.metadata-sorts{min-width:0;overflow-wrap:anywhere}.quest-metadata .pill{max-width:100%}}
+
+/* Reward descriptions and their image preview share the reward column. */
+.quest-row>.quest-reward{display:flex;align-items:center;justify-content:center;gap:12px}.quest-reward-text{min-width:0;overflow-wrap:anywhere}.quest-reward .quest-thumb{margin-left:0}.quest-reward .reward-pills{justify-content:center}.quest-row{min-height:100px}
+@media(min-width:1001px) and (max-width:1250px){.table-head,.quest-row{grid-template-columns:minmax(180px,1fr) 80px 80px minmax(120px,1fr) 140px var(--quest-actions-width)}}
+@media(min-width:1251px){.table-head,.quest-row{grid-template-columns:minmax(180px,calc((100% - 330px - 166px - var(--quest-actions-width) - 35px)/2)) 110px 110px minmax(120px,1fr) 166px var(--quest-actions-width)}}
+@media(min-width:1650px){.table-head,.quest-row{grid-template-columns:minmax(250px,calc((100% - 360px - 180px - var(--quest-actions-width) - 50px)/2)) 120px 120px minmax(120px,1fr) 180px var(--quest-actions-width)}}
+@media(min-width:761px) and (max-width:1000px){.quest-row>.quest-reward{grid-column:1/-1;grid-row:2}.quest-main,.quest-rank,.quest-metadata,.status-cell,.quest-edit{grid-row:1}}
+@media(max-width:760px){.quest-row>.quest-reward,.quest-rank,.quest-row>.quest-metadata,.status-cell{padding-left:0}.quest-row{padding-left:13px}.quest-row>.quest-reward{justify-content:flex-start}.quest-reward-text{flex:1}.quest-row{min-height:0}}
+/* Match the preview's right inset to the row's six-pixel vertical inset. */
+.quest-row>.quest-reward{padding-right:6px}.quest-reward-text{flex:1}.quest-reward .quest-thumb{margin-left:auto}
+@media(min-width:1001px){.quest-row{min-height:calc(var(--quest-thumb-size) + 12px)}}
+
+/* Reserve the right-hand image/edit area even when no image is stored. */
+.table-head,.quest-row{--quest-action-gap:22px;--quest-actions-width:calc(var(--quest-thumb-size,88px) + var(--quest-action-gap) + 34px)}.table-head{--quest-thumb-size:88px}.quest-actions{display:flex;align-items:center;justify-content:flex-end;gap:var(--quest-action-gap);min-width:0;align-self:center}.quest-actions .quest-thumb{margin:0}.quest-row>.quest-reward{padding-right:0}
+@media(max-width:1250px){.table-head{--quest-thumb-size:76px}}
+@media(min-width:761px) and (max-width:1000px){.table-head,.quest-row{grid-template-columns:minmax(150px,1fr) 65px 80px 140px var(--quest-actions-width)}.quest-actions{grid-column:5;grid-row:1}}
+@media(max-width:760px){.quest-row{grid-template-columns:minmax(0,1fr) var(--quest-actions-width)}.quest-actions{grid-column:2;grid-row:1}.quest-actions .quest-thumb{align-self:center}}
+
+@media(max-width:1100px){.column-resizer{display:none}}
+@media(min-width:1001px) and (max-width:1100px){.table-head,.quest-row{--quest-thumb-size:44px;grid-template-columns:minmax(150px,1fr) 65px 65px minmax(100px,1fr) 120px var(--quest-actions-width)}}
+
+@media(max-width:1250px){.table-head,.quest-row{--quest-action-gap:16px}}
+@media(max-width:760px){.table-head,.quest-row{--quest-action-gap:13px}}
+
+.quest-expand-toggle{width:40px;height:40px;border-color:var(--line)}.quest-expand-toggle svg{transition:transform .15s}.quest-expand-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+@media(max-width:760px){.list-toolbar .search-wrap{flex-basis:0;min-width:0}.quest-expand-toggle{flex:none}}

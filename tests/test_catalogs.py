@@ -1,4 +1,5 @@
 import io
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -76,6 +77,33 @@ class CatalogTests(unittest.TestCase):
             with self.subTest(color=invalid), self.assertRaises(ValueError):
                 catalogs.validate_record({**legacy,'color':invalid})
 
+    def test_area_colors_persist_and_roundtrip(self):
+        for kind in ('area',):
+            with self.subTest(kind=kind):
+                record = self.create(kind, 'Farbig ' + kind, color='#abcdef')
+                self.assertEqual(record['color'], '#ABCDEF')
+                reopened = Tracker(self.temp.name)
+                actual = next(r for r in reopened.state()['catalogs'][kind] if r['id'] == record['id'])
+                self.assertEqual(actual['color'], '#ABCDEF')
+                blob = self.tracker.export()
+                self.tracker.save_catalog({**record, 'color': '#112233'})
+                preview = self.tracker.preview(blob)
+                self.tracker.commit(preview['token'], {})
+                self.assertEqual(self.record(kind, record['name'])['color'], '#112233')
+                preview = self.tracker.preview(blob)
+                self.tracker.commit(preview['token'], {}, update_catalogs=True)
+                self.assertEqual(self.record(kind, record['name'])['color'], '#ABCDEF')
+                self.tracker.save_catalog({**record, 'color': None})
+                self.assertIsNone(self.record(kind, record['name'])['color'])
+
+    def test_area_color_validation_accepts_legacy_records(self):
+        for kind in ('area',):
+            legacy = {'id': str(uuid.uuid4()), 'kind': kind, 'name': 'Alter Eintrag'}
+            self.assertIsNone(catalogs.validate_record(legacy)['color'])
+            for invalid in ('red', '#abc', '#1234567', '', 123, False):
+                with self.subTest(kind=kind, color=invalid), self.assertRaises(ValueError):
+                    catalogs.validate_record({**legacy, 'color': invalid})
+
     def test_rename_and_merge_preserve_quest_ids_progress_and_import_aliases(self):
         q=quest()
         self.tracker.save_quest(q,True)
@@ -112,14 +140,13 @@ class CatalogTests(unittest.TestCase):
 
     def test_extra_lists_roundtrip_and_rename(self):
         area=self.create('area','Windebene')
-        tag=self.create('tag','Wöchentlich')
         reward=self.create('reward_type','Spezialbelohnung')
         q=quest()
-        q.update(area=area['name'],area_id=area['id'],quest_type='Jagd',tags=[tag['name']],reward_types=[reward['name']])
+        q.update(area=area['name'],area_id=area['id'],quest_type='Jagd',reward_types=[reward['name']])
         self.tracker.save_quest(q,True)
-        self.tracker.save_catalog({**tag,'name':'Wöchentlich neu'})
+        self.tracker.save_catalog({**area,'name':'Windebene neu'})
         actual=self.tracker.state()['quests'][0]
-        self.assertEqual(actual['tags'],['Wöchentlich neu'])
+        self.assertEqual(actual['area'],'Windebene neu')
         blob=self.tracker.export()
         with tempfile.TemporaryDirectory() as directory:
             other=Tracker(directory)
@@ -127,7 +154,7 @@ class CatalogTests(unittest.TestCase):
             other.commit(preview['token'],{q['id']:'add'})
             copied=other.state()['quests'][0]
             self.assertEqual(copied['area_id'],area['id'])
-            self.assertEqual(copied['tags'],actual['tags'])
+            self.assertEqual(copied['area'],actual['area'])
             self.assertEqual(copied['reward_types'],['Spezialbelohnung'])
 
     def test_catalog_import_preserves_local_metadata_unless_opted_in(self):
@@ -145,6 +172,56 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(parsed['images']),36)
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
             self.assertNotIn('userdata.json',archive.namelist())
+
+    def test_legacy_custom_tags_are_ignored_on_import_and_export(self):
+        q = quest()
+        tag_id, foreign_id = str(uuid.uuid4()), str(uuid.uuid4())
+        q.update(tags=['Alt'], tag_ids=[tag_id])
+        blob = io.BytesIO()
+        with zipfile.ZipFile(blob, 'w') as archive:
+            archive.writestr('catalog.json', json.dumps({
+                'format': 'mh-wilds-quests', 'version': 2, 'quests': [q],
+                'catalogs': [{'id': tag_id, 'kind': 'tag', 'name': 'Alt'}],
+                'catalog_id_aliases': [{'foreign_id': foreign_id, 'kind': 'tag', 'target_id': tag_id}],
+            }))
+        preview = self.tracker.preview(blob.getvalue())
+        self.tracker.commit(preview['token'], {q['id']: 'add'})
+        parsed = parse_package(self.tracker.export())
+        self.assertNotIn('tags', parsed['quests'][0])
+        self.assertNotIn('tag_ids', parsed['quests'][0])
+        self.assertFalse(any(r['kind'] == 'tag' for r in parsed['catalogs']))
+        self.assertNotIn('tag', self.tracker.state()['catalogs'])
+        with self.assertRaises(ValueError):
+            self.create('tag', 'Neu')
+
+    def test_v2_migration_removes_custom_tags_and_preserves_progress(self):
+        q = quest()
+        self.tracker.save_quest(q, True)
+        self.tracker.set_progress(q['id'], {'first_clear': True, 'all_rewards': True})
+        tag_id = str(uuid.uuid4())
+        with self.tracker.connect() as db:
+            raw = json.loads(db.execute('SELECT data FROM quests WHERE id=?', (q['id'],)).fetchone()[0])
+            raw.update(tags=['Alt'], tag_ids=[tag_id])
+            db.execute('UPDATE quests SET data=? WHERE id=?', (json.dumps(raw), q['id']))
+            db.execute('INSERT INTO catalog_entries VALUES (?,?,?,?,?)',
+                       (tag_id, 'tag', 'Alt', 'alt', json.dumps({'id': tag_id, 'kind': 'tag', 'name': 'Alt'})))
+            db.execute('INSERT INTO catalog_name_aliases VALUES (?,?,?)', ('tag', 'alt', tag_id))
+            db.execute('INSERT INTO catalog_id_aliases VALUES (?,?,?)', (str(uuid.uuid4()), 'tag', tag_id))
+            db.execute('PRAGMA main.user_version=2')
+        personal = (Path(self.temp.name) / 'userdata.sqlite').read_bytes()
+        reopened = Tracker(self.temp.name)
+        actual = reopened.state()['quests'][0]
+        self.assertNotIn('tags', actual)
+        self.assertNotIn('tag_ids', actual)
+        self.assertTrue(actual['progress']['all_rewards'])
+        self.assertEqual((Path(self.temp.name) / 'userdata.sqlite').read_bytes(), personal)
+        with reopened.connect() as db:
+            for table in ('catalog_entries', 'catalog_name_aliases', 'catalog_id_aliases'):
+                self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table} WHERE kind='tag'").fetchone()[0], 0)
+        backup_path = Path(self.temp.name) / 'migration-backup-v2/quests.sqlite'
+        self.assertTrue(backup_path.is_file())
+        with closing(sqlite3.connect(backup_path)) as backup:
+            self.assertEqual(backup.execute("SELECT COUNT(*) FROM catalog_entries WHERE kind='tag'").fetchone()[0], 1)
 
     def test_v1_migration_backs_up_and_preserves_personal_database(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -176,11 +253,11 @@ class CatalogTests(unittest.TestCase):
         monster=self.record('monster','Rey-Dau')
         blob=io.BytesIO()
         with zipfile.ZipFile(blob,'w') as archive:
-            archive.writestr('catalog.json',json.dumps({'format':'mh-wilds-quests','version':2,'quests':[],'catalogs':[{'id':monster['id'],'kind':'tag','name':'Falsche Kategorie'}]}))
+            archive.writestr('catalog.json',json.dumps({'format':'mh-wilds-quests','version':2,'quests':[],'catalogs':[{'id':monster['id'],'kind':'area','name':'Falsche Kategorie'}]}))
         preview=self.tracker.preview(blob.getvalue())
         with self.assertRaises(ValueError): self.tracker.commit(preview['token'],{})
         self.assertEqual(self.record('monster','Rey-Dau')['id'],monster['id'])
-        self.assertEqual(self.tracker.state()['catalogs']['tag'],[])
+        self.assertEqual(self.tracker.state()['catalogs']['area'],[])
 
     def test_missing_catalog_icon_rejects_preview(self):
         blob=io.BytesIO()

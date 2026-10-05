@@ -127,16 +127,12 @@ def validate_quest(raw):
     quest["images"] = list(dict.fromkeys(images))
     for field in ("area", "quest_type"):
         quest[field] = text_value(raw.get(field, ""), field, 200)
-    tags = raw.get("tags", [])
-    if not isinstance(tags, list) or len(tags) > 100:
-        raise ValidationError("Ungültige Tags.")
-    quest["tags"] = list(dict.fromkeys(text_value(t, "Tag", 200, True) for t in tags))
     for field in ("rank_id", "area_id", "quest_type_id"):
         if raw.get(field) is not None:
             quest[field] = identifier(raw[field])
         elif field != 'rank_id':
             quest[field] = None
-    for field in ("reward_type_ids", "tag_ids"):
+    for field in ("reward_type_ids",):
         if field in raw:
             if not isinstance(raw[field], list) or len(raw[field]) > 100:
                 raise ValidationError("Ungültige Stammdaten-Referenzen.")
@@ -233,7 +229,7 @@ def parse_package(content):
                 records = raw.get("catalogs", [])
                 if not isinstance(records, list) or len(records) > 3000:
                     raise ValidationError("Ungültige Stammdatenliste.")
-                records = [catalogs.validate_record(r) for r in records]
+                records = [catalogs.validate_record(r) for r in records if not isinstance(r, dict) or r.get('kind') != 'tag']
                 if len({r['id'] for r in records}) != len(records):
                     raise ValidationError("Doppelte Stammdaten-IDs.")
                 id_aliases = raw.get("catalog_id_aliases", [])
@@ -244,6 +240,8 @@ def parse_package(content):
                 for alias in id_aliases:
                     if not isinstance(alias, dict):
                         raise ValidationError("Ungültige Stammdaten-Zuordnung.")
+                    if alias.get('kind') == 'tag':
+                        continue
                     foreign, target = identifier(alias.get('foreign_id')), identifier(alias.get('target_id'))
                     if foreign in records_by_id or target not in records_by_id or records_by_id[target]['kind'] != alias.get('kind'):
                         raise ValidationError("Stammdaten-Zuordnung verweist nicht auf einen gültigen Eintrag.")
@@ -289,10 +287,10 @@ class Tracker:
         self.previews = {}
         with self.connect() as db:
             version = db.execute("PRAGMA main.user_version").fetchone()[0]
-            if version > 2:
+            if version > 3:
                 raise ValidationError("Die Datenbank stammt aus einer neueren Tracker-Version.")
-            if version == 1:
-                backup_dir = self.directory / "migration-backup-v1"
+            if version in (1, 2):
+                backup_dir = self.directory / f"migration-backup-v{version}"
                 backup_dir.mkdir(exist_ok=True)
                 if not (backup_dir / 'quests.sqlite').exists():
                     with closing(sqlite3.connect(backup_dir / 'quests.sqlite')) as backup:
@@ -313,7 +311,11 @@ class Tracker:
                 for qid, raw in db.execute('SELECT id,data FROM quests').fetchall():
                     q = catalogs.resolve_quest(db, validate_quest(json.loads(raw)), True)
                     db.execute('UPDATE quests SET data=? WHERE id=?', (json.dumps(q, ensure_ascii=False), qid))
-            db.execute("PRAGMA main.user_version = 2")
+            if version < 3:
+                for table in ('catalog_entries', 'catalog_id_aliases', 'catalog_name_aliases'):
+                    db.execute(f"DELETE FROM {table} WHERE kind='tag'")
+                catalogs.refresh_quests(db)
+            db.execute("PRAGMA main.user_version = 3")
             if db.execute('PRAGMA personal.user_version').fetchone()[0] != 1:
                 db.execute("PRAGMA personal.user_version = 1")
 

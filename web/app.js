@@ -210,7 +210,7 @@ let imageSet = null;
 let toastTimer;
 const expanded = new Set();
 const rewardFilter = new Set();
-const filterIds = ['filter-status', 'filter-rank', 'filter-stars', 'filter-hr', 'filter-monster', 'filter-type', 'filter-area', 'filter-quest-type', 'filter-tag'];
+const filterIds = ['filter-status', 'filter-rank', 'filter-stars', 'filter-hr', 'filter-monster', 'filter-type', 'filter-area', 'filter-quest-type'];
 let csrf = document.querySelector('meta[name="tracker-token"]').content;
 let serverOnline = true;
 let checkingConnection = false;
@@ -278,7 +278,7 @@ window.addEventListener('pageshow', event => { if (event.persisted) connectBrows
 window.addEventListener('focus', checkConnection);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkConnection(); });
 setInterval(checkConnection, 3000);
-const catalogLabels = { monster: 'Monster', state: 'Monsterzustand', rank: 'Rang', reward_type: 'Belohnungsart', area: 'Gebiet', quest_type: 'Questtyp', tag: 'Tag' };
+const catalogLabels = { monster: 'Monster', state: 'Monsterzustand', rank: 'Rang', reward_type: 'Belohnungsart', area: 'Gebiet', quest_type: 'Questtyp' };
 let entityEditing = null;
 let entityKind = 'monster';
 let entityIcon = null;
@@ -308,7 +308,7 @@ function statePill(status) {
   pill.style.color = brightness > 150 ? '#142017' : '#ffffff';
   return pill;
 }
-function defaultRewardColor(name) {
+function defaultRewardColor(name, kind = 'reward_type') {
   const palette = {
     'Ausrüstung': '#FFB938',
     'Materialien': '#35C9EF',
@@ -318,8 +318,8 @@ function defaultRewardColor(name) {
     'Jägerrang XP': '#B8E64C',
     'Kochzutaten': '#36D6A0',
   };
-  const record = recordByName('reward_type', name);
-  const known = [record?.name, ...(record?.aliases || []), name].find(value => Object.hasOwn(palette, value));
+  const record = recordByName(kind, name);
+  const known = kind === 'reward_type' && [record?.name, ...(record?.aliases || []), name].find(value => Object.hasOwn(palette, value));
   if (known) return palette[known];
   // Custom categories get a repeatable vivid color based on their stable identity.
   const key = record?.id || name;
@@ -392,7 +392,7 @@ function tagChecks(container, values, selected, onChange, kind = null) {
   container.replaceChildren(...values.map(value => {
     const checkbox = el('input', { type: 'checkbox', value, checked: selected.has(value), onchange: e => onChange(value, e.target.checked) });
     const label = el('label', { class: 'tag-check' }, [checkbox, el('span', { text: value })]);
-    if (kind === 'reward_type') rewardColors(label, recordByName(kind, value)?.color || defaultRewardColor(value));
+    if (['reward_type', 'area'].includes(kind)) rewardColors(label, recordByName(kind, value)?.color || defaultRewardColor(value, kind));
     return label;
   }));
 }
@@ -408,7 +408,6 @@ async function loadState() {
   options($('filter-monster'), knownMonsters(), 'Alle Monster');
   options($('filter-area'), records('area').map(r=>r.name), 'Alle Gebiete');
   options($('filter-quest-type'), records('quest_type').map(r=>r.name), 'Alle Questtypen');
-  options($('filter-tag'), records('tag').map(r=>r.name), 'Alle Tags');
   tagChecks($('reward-filters'), state.reward_types, rewardFilter, (value, checked) => {
     if (checked) rewardFilter.add(value); else rewardFilter.delete(value);
     render();
@@ -425,7 +424,7 @@ function refreshEditorCatalogs() {
     catalogOptions(row.querySelector('.target-kind'), 'state');
     row.querySelector('.target-monster').updatePreview?.();
   }
-  for (const [container, kind] of [['editor-reward-types', 'reward_type'], ['editor-tags', 'tag']]) {
+  for (const [container, kind] of [['editor-reward-types', 'reward_type']]) {
     const checked = new Set([...$(container).querySelectorAll('input:checked')].map(input=>input.value));
     tagChecks($(container), records(kind).map(r=>r.name), checked, ()=>{}, kind);
   }
@@ -445,13 +444,15 @@ function targetsNode(q) {
   });
   return node;
 }
-function pill(value, color = recordByName('reward_type', value)?.color) {
+function pill(value, color = undefined, kind = 'reward_type') {
   let style = '';
-  if (value === 'Ausrüstung') style = ' equipment';
-  else if (value === 'Dekorationen') style = ' deco';
-  else if (value.includes('Material')) style = ' material';
+  if (kind === 'reward_type') {
+    if (value === 'Ausrüstung') style = ' equipment';
+    else if (value === 'Dekorationen') style = ' deco';
+    else if (value.includes('Material')) style = ' material';
+  }
   const node = el('span', { class: `pill${style}`, text: value });
-  rewardColors(node, color || defaultRewardColor(value));
+  rewardColors(node, (color === undefined ? recordByName(kind, value)?.color : color) || defaultRewardColor(value, kind));
   return node;
 }
 function filteredQuests() {
@@ -476,7 +477,6 @@ function filteredQuests() {
     if (rewardFilter.size && !q.reward_types.some(t => rewardFilter.has(t))) return false;
     if ($('filter-area').value && q.area !== $('filter-area').value) return false;
     if ($('filter-quest-type').value && q.quest_type !== $('filter-quest-type').value) return false;
-    if ($('filter-tag').value && !(q.tags || []).includes($('filter-tag').value)) return false;
     return true;
   });
   const compareText = (a, b) => a.localeCompare(b, 'de', { numeric: true, sensitivity: 'base' });
@@ -485,8 +485,9 @@ function filteredQuests() {
     rank: (a, b) => a.stars - b.stars || (a.hr ?? 0) - (b.hr ?? 0) || compareText(a.rank, b.rank),
     progress: (a, b) => Number(a.progress.all_rewards) - Number(b.progress.all_rewards) || Number(a.progress.first_clear) - Number(b.progress.first_clear),
   };
-  if (questSort.column === 'reward') {
-    const tags = new Map(result.map(q => [q, [...q.reward_types].sort((a, b) => questSort.direction * compareText(a, b))]));
+  if (['reward', 'area'].includes(questSort.column)) {
+    const values = q => questSort.column === 'area' ? (q.area ? [q.area] : []) : q.reward_types;
+    const tags = new Map(result.map(q => [q, [...values(q)].sort((a, b) => questSort.direction * compareText(a, b))]));
     result.sort((a, b) => {
       const aTags = tags.get(a), bTags = tags.get(b);
       // Untagged quests stay last; compare the highest-priority tag first.
@@ -525,7 +526,8 @@ function renderActiveFilters() {
     const input = $(id);
     if (!input.value) return;
     const label = id === 'filter-hr' ? `JR bis ${input.value}` : input.selectedOptions[0].text;
-    add(label, () => { input.value = ''; });
+    const kind = id === 'filter-area' ? 'area' : null;
+    add(label, () => { input.value = ''; }, kind ? recordByName(kind, input.value)?.color || defaultRewardColor(input.value, kind) : null);
   });
   if ($('search').value.trim()) add(`Suche: ${$('search').value.trim()}`, () => { $('search').value = ''; });
   rewardFilter.forEach(value => add(value, () => {
@@ -534,6 +536,15 @@ function renderActiveFilters() {
   }, recordByName('reward_type', value)?.color || defaultRewardColor(value)));
   $('active-filters').replaceChildren(...pills);
   $('active-filters').hidden = !pills.length;
+}
+function updateExpandToggle() {
+  const allExpanded = state.quests.length > 0 && state.quests.every(q => expanded.has(q.id));
+  const button = $('toggle-all-quests');
+  const label = allExpanded ? 'Alle Quests einklappen' : 'Alle Quests ausklappen';
+  button.setAttribute('aria-expanded', String(allExpanded));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.disabled = !state.quests.length;
 }
 function render() {
   renderSortHeaders();
@@ -550,6 +561,7 @@ function render() {
   $('result-count').textContent = `${quests.length} von ${total} Quests`;
   renderActiveFilters();
   $('quest-list').replaceChildren(...quests.map(questNode));
+  updateExpandToggle();
   if (!quests.length) {
     $('quest-list').append(el('div', { class: 'empty-state' }, [icon('hunt'),
       el('h3', { text: total ? 'Keine passenden Quests' : 'Deine nächste Jagd beginnt hier' }),
@@ -560,7 +572,7 @@ function render() {
 }
 function questNode(q) {
   const hasImages = q.images.length > 0;
-  const thumb = el(hasImages ? 'button' : 'div', { class: 'quest-thumb' }, hasImages ? [el('img', { src: `/images/${q.images[0]}`, alt: `Belohnung: ${q.name}`, loading: 'lazy' })] : [icon('hunt')]);
+  const thumb = hasImages ? el('button', { class: 'quest-thumb' }, [el('img', { src: `/images/${q.images[0]}`, alt: `Belohnung: ${q.name}`, loading: 'lazy' })]) : null;
   if (hasImages) {
     thumb.title = 'Belohnungsbilder ansehen';
     thumb.setAttribute('aria-label', `Belohnungsbilder für ${q.name} ansehen`);
@@ -571,18 +583,29 @@ function questNode(q) {
     if (expanded.has(q.id)) expanded.delete(q.id); else expanded.add(q.id);
     const isOpen = expanded.has(q.id);
     title.setAttribute('aria-expanded', String(isOpen));
+    updateExpandToggle();
     if (isOpen) item.append(detailNode(q)); else item.querySelector('.quest-details')?.remove();
   } }, [q.name, icon('chevron')]);
-  const main = el('div', { class: 'quest-main' }, [thumb, el('div', { class: 'quest-text' }, [title, targetsNode(q)])]);
+  const metadata = el('div', { class: 'quest-metadata' });
+  if (q.area) {
+    const area = pill(q.area, undefined, 'area');
+    area.classList.add('area-pill');
+    area.title = `Gebiet: ${q.area}`;
+    metadata.append(area);
+  }
+  const text = el('div', { class: 'quest-text' }, [title, targetsNode(q)]);
+  const main = el('div', { class: 'quest-main' }, [text]);
   const rank = el('div', { class: 'quest-rank' }, [el('strong', { text: `${q.stars} ★` }), el('small', { text: q.rank }), el('small', { text: q.hr == null ? 'JR: keine Angabe' : `JR ${q.hr}+` })]);
-  const reward = el('div', { class: 'quest-reward' }, [el('div', { class: 'reward-pills' }, q.reward_types.map(value => pill(value)))]);
+  const rewardText = el('div', { class: 'quest-reward-text' }, [el('div', { class: 'reward-pills' }, q.reward_types.map(value => pill(value)))]);
   if (q.rewards.length) {
     const first = q.rewards[0];
-    reward.append(el('div', { class: 'reward-name', text: first.name }), el('div', { class: 'reward-needed', text: `${first.required ? `${first.required} benötigt` : ''}${q.rewards.length > 1 ? ` · +${q.rewards.length - 1} weitere` : ''}` }));
+    rewardText.append(el('div', { class: 'reward-name', text: first.name }), el('div', { class: 'reward-needed', text: `${first.required ? `${first.required} benötigt` : ''}${q.rewards.length > 1 ? ` · +${q.rewards.length - 1} weitere` : ''}` }));
   }
+  const reward = el('div', { class: 'quest-reward' }, [rewardText]);
   const progress = el('div', { class: 'status-cell' }, [progressControl(q, 'first_clear', 'Erster Abschluss'), progressControl(q, 'all_rewards', 'Alle Belohnungen')]);
   const edit = el('button', { class: 'icon-button quest-edit', title: 'Quest bearbeiten', 'aria-label': `${q.name} bearbeiten`, onclick: () => openEditor(q) }, [icon('edit')]);
-  const item = el('article', { class: `quest-item${q.progress.all_rewards ? ' completed' : ''}` }, [el('div', { class: 'quest-row' }, [main, rank, reward, progress, edit])]);
+  const actions = el('div', { class: 'quest-actions' }, thumb ? [thumb, edit] : [edit]);
+  const item = el('article', { class: `quest-item${q.progress.all_rewards ? ' completed' : ''}` }, [el('div', { class: 'quest-row' }, [main, rank, metadata, reward, progress, actions])]);
   if (expanded.has(q.id)) item.append(detailNode(q));
   return item;
 }
@@ -608,7 +631,7 @@ function detailNode(q) {
   const first = el('div', {}, [el('h3', { class: 'detail-title', text: 'JAGD & BELOHNUNGEN' })]);
   q.targets.forEach(t => first.append(el('p', { class: 'detail-line', text: targetText(t) })));
   first.append(el('p', { class: 'detail-line', text: rankText(q) }));
-  if (q.area || q.quest_type || q.tags?.length) first.append(el('p', { class:'detail-line', text:[q.area, q.quest_type, ...(q.tags || [])].filter(Boolean).join(' · ') }));
+  if (q.area || q.quest_type) first.append(el('p', { class:'detail-line', text:[q.area, q.quest_type].filter(Boolean).join(' · ') }));
   q.rewards.forEach(r => first.append(el('p', { class: 'detail-line', text: `${r.name}${r.required ? ` · ${r.required} benötigt` : ''}` })));
   if (q.notes) first.append(el('h3', { class: 'detail-title', text: 'NOTIZEN' }), el('p', { class: 'detail-notes', text: q.notes }));
   const second = el('div', {}, [el('h3', { class: 'detail-title', text: `BELOHNUNGSBILDER${q.images.length ? ` · ${q.images.length}` : ''}` })]);
@@ -686,7 +709,6 @@ function openEditor(q = null) {
   $('quest-notes').value = q?.notes || '';
   $('quest-area').value = q?.area_id || '';
   $('quest-type').value = q?.quest_type_id || '';
-  tagChecks($('editor-tags'), records('tag').map(r=>r.name), new Set(q?.tags || []), ()=>{});
   $('target-rows').replaceChildren();
   (q?.targets || [{ count: 1, monster: '', type: 'Normal' }]).forEach(addTarget);
   $('reward-rows').replaceChildren();
@@ -717,8 +739,6 @@ async function saveQuest(event) {
       hr: $('quest-hr').value === '' ? null : Number($('quest-hr').value),
       reward_types: [...$('editor-reward-types').querySelectorAll('input:checked')].map(input => input.value),
       reward_type_ids: [...$('editor-reward-types').querySelectorAll('input:checked')].map(input => recordByName('reward_type', input.value).id),
-      tags: [...$('editor-tags').querySelectorAll('input:checked')].map(input=>input.value),
-      tag_ids: [...$('editor-tags').querySelectorAll('input:checked')].map(input=>recordByName('tag',input.value).id),
       area: recordById('area',$('quest-area').value)?.name || '', area_id: $('quest-area').value || null,
       quest_type: recordById('quest_type',$('quest-type').value)?.name || '', quest_type_id: $('quest-type').value || null,
       rewards: [...$('reward-rows').children].map(row => ({ name: row.querySelector('.reward-input').value.trim(), required: row.querySelector('.required-input').value.trim() })),
@@ -867,14 +887,14 @@ function openCatalogs(kind = 'monster') {
   renderCatalogs(); $('catalog-dialog').showModal();
 }
 function usesRecord(r) {
-  return state.quests.filter(q => r.kind === 'monster' ? q.targets.some(t=>t.monster_id===r.id) : r.kind === 'state' ? q.targets.some(t=>t.type_id===r.id) : r.kind === 'reward_type' ? q.reward_type_ids.includes(r.id) : r.kind === 'tag' ? q.tag_ids.includes(r.id) : q[`${r.kind}_id`]===r.id).length;
+  return state.quests.filter(q => r.kind === 'monster' ? q.targets.some(t=>t.monster_id===r.id) : r.kind === 'state' ? q.targets.some(t=>t.type_id===r.id) : r.kind === 'reward_type' ? q.reward_type_ids.includes(r.id) : q[`${r.kind}_id`]===r.id).length;
 }
 function renderCatalogs() {
   const kind = $('catalog-kind').value;
   const term = $('catalog-search').value.trim().toLocaleLowerCase('de');
   const rows = records(kind).filter(r=>[r.name,...r.aliases].some(n=>n.toLocaleLowerCase('de').includes(term)));
   $('catalog-list').replaceChildren(...rows.map(r=> {
-    const preview = kind === 'monster' ? monsterGlyph(r) : kind === 'state' ? statePill(r) : kind === 'reward_type' ? pill(r.name) : null;
+    const preview = kind === 'monster' ? monsterGlyph(r) : kind === 'state' ? statePill(r) : ['reward_type','area'].includes(kind) ? pill(r.name, undefined, kind) : null;
     const info = el('div', {class:'catalog-info'}, [el('strong',{text:r.name}),el('small',{text:`${usesRecord(r)} Quests${r.aliases.length ? ` · Auch bekannt als: ${r.aliases.join(', ')}` : ''}`})]);
     const actions = el('div',{class:'catalog-actions'});
     if (!r.is_none) {
@@ -890,7 +910,7 @@ function updateColor(value) {
   if (!/^#[0-9a-f]{6}$/i.test(value)) return;
   $('entity-color').value=value; $('entity-color-hex').value=value.toUpperCase();
   const name = $('entity-name').value || 'Vorschau';
-  const preview = entityKind === 'reward_type' ? pill(name, $('entity-color-default').checked ? null : value) : statePill({name,color:value});
+  const preview = ['reward_type','area'].includes(entityKind) ? pill(name, $('entity-color-default').checked ? null : value, entityKind) : statePill({name,color:value});
   $('entity-color-preview').replaceChildren(preview);
 }
 function renderEntityIcon() {
@@ -903,17 +923,18 @@ function openEntity(kind, record=null, callback=null) {
   $('entity-form').reset();
   $('entity-title').textContent=`${catalogLabels[kind]} ${record ? 'bearbeiten' : 'anlegen'}`;
   $('entity-name').value=record?.name || '';
-  $('entity-color-fields').hidden=!['state','reward_type'].includes(kind);
-  $('entity-color-label').textContent=kind==='reward_type' ? 'Kategoriefarbe' : 'Zustandsfarbe';
-  $('entity-color-help').textContent=kind==='reward_type' ? 'Diese Farbe kennzeichnet die Belohnungsart in der Questliste und den Filtern.' : 'Diese Farbe umrandet ausschließlich das Icon des jeweiligen Monsters. Normal/ohne Zustand hat keine Umrandung.';
-  $('entity-color-default-label').hidden=kind!=='reward_type';
+  const categoryColor = ['reward_type','area'].includes(kind);
+  $('entity-color-fields').hidden=!categoryColor && kind!=='state';
+  $('entity-color-label').textContent=categoryColor ? 'Kategoriefarbe' : 'Zustandsfarbe';
+  $('entity-color-help').textContent=categoryColor ? 'Diese Farbe kennzeichnet den Eintrag in der Questliste und bei der Auswahl.' : 'Diese Farbe umrandet ausschließlich das Icon des jeweiligen Monsters. Normal/ohne Zustand hat keine Umrandung.';
+  $('entity-color-default-label').hidden=!categoryColor;
   $('entity-color-default').checked=!record?.color;
-  $('entity-color-hex').required=['state','reward_type'].includes(kind);
+  $('entity-color-hex').required=categoryColor || kind==='state';
   $('entity-monster-fields').hidden=kind!=='monster';
   $('entity-rank-fields').hidden=kind!=='rank';
   $('entity-stars-min').value=record?.stars_min ?? '';
   $('entity-stars-max').value=record?.stars_max ?? '';
-  updateColor(record?.color || (kind==='reward_type' ? defaultRewardColor(record?.name || '') : '#7837FC')); renderEntityIcon();
+  updateColor(record?.color || (categoryColor ? defaultRewardColor(record?.name || '', kind) : '#7837FC')); renderEntityIcon();
   $('entity-dialog').showModal(); $('entity-name').focus();
 }
 async function saveEntity(event) {
@@ -921,7 +942,7 @@ async function saveEntity(event) {
   await safely(async()=> {
     const raw={...(entityEditing || {}),kind:entityKind,name:$('entity-name').value.trim()};
     if (entityKind==='state') raw.color=$('entity-color-hex').value;
-    if (entityKind==='reward_type') raw.color=$('entity-color-default').checked ? null : $('entity-color-hex').value;
+    if (['reward_type','area'].includes(entityKind)) raw.color=$('entity-color-default').checked ? null : $('entity-color-hex').value;
     if (entityKind==='monster') raw.icon=entityIcon;
     if (entityKind==='rank') { raw.stars_min=$('entity-stars-min').value ? Number($('entity-stars-min').value) : null; raw.stars_max=$('entity-stars-max').value ? Number($('entity-stars-max').value) : null; }
     $('entity-save').disabled=true;
@@ -967,7 +988,7 @@ $('entity-icon-input').addEventListener('change',uploadEntityIcon);
 $('entity-icon-remove').addEventListener('click',()=>{entityIcon=null;renderEntityIcon();});
 document.querySelectorAll('[data-add-kind]').forEach(button=>button.addEventListener('click',()=>openEntity(button.dataset.addKind,null,r=>{
   if(button.dataset.addSelect) $(button.dataset.addSelect).value=r.id;
-  if(['tag','reward_type'].includes(r.kind)) { const container=$(r.kind==='tag'?'editor-tags':'editor-reward-types'); [...container.querySelectorAll('input')].find(input=>input.value===r.name).checked=true; }
+  if(r.kind==='reward_type') { const container=$('editor-reward-types'); [...container.querySelectorAll('input')].find(input=>input.value===r.name).checked=true; }
 })));
 $('merge-form').addEventListener('submit',event=>{event.preventDefault();safely(async()=>{
   $('merge-save').disabled=true;
@@ -978,6 +999,156 @@ $('merge-form').addEventListener('submit',event=>{event.preventDefault();safely(
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
 filterIds.forEach(id => $(id).addEventListener(id === 'filter-hr' ? 'input' : 'change', render));
 $('search').addEventListener('input', render);
+function setupColumnResizing() {
+  const storageKey = 'wilds-column-widths-v2';
+  const columns = ['name', 'rank', 'area', 'reward', 'progress'];
+  const layoutColumns = [...columns, 'actions'];
+  const minimums = { name: 180, rank: 80, area: 80, reward: 120, progress: 140 };
+  const panel = document.querySelector('.quest-panel');
+  const header = document.querySelector('.table-head');
+  const actionMinimum = () => {
+    const style = getComputedStyle(header);
+    return parseFloat(style.getPropertyValue('--quest-thumb-size')) + parseFloat(style.getPropertyValue('--quest-action-gap')) + 34;
+  };
+  minimums.actions = actionMinimum();
+  const widths = {};
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    for (const column of layoutColumns) {
+      if (Number.isFinite(saved?.[column]) && saved[column] >= minimums[column] && saved[column] <= 5000) widths[column] = saved[column];
+    }
+  } catch { /* Keep the default layout when storage is unavailable. */ }
+  if (columns.every(column => widths[column]) && !widths.actions) widths.actions = minimums.actions;
+  if (!layoutColumns.every(column => widths[column])) {
+    for (const column of layoutColumns) delete widths[column];
+  }
+  const save = () => {
+    try { localStorage.setItem(storageKey, JSON.stringify(widths)); }
+    catch { toast('Spaltenbreiten gelten für diese Sitzung. Der Browser erlaubt keine Speicherung.'); }
+  };
+  const apply = () => {
+    panel.classList.toggle('custom-columns', window.innerWidth > 1100 && layoutColumns.every(column => widths[column]));
+    for (const column of layoutColumns) {
+      if (widths[column]) panel.style.setProperty(`--column-${column}`, `${widths[column]}px`);
+      else panel.style.removeProperty(`--column-${column}`);
+    }
+  };
+  const handles = columns.map(column => {
+    const cell = header.querySelector(`[data-sort-column="${column}"]`).closest(column === 'area' ? '.metadata-sorts' : 'button');
+    const label = cell.textContent.replace('↕', '').trim();
+    const handle = el('div', { class: 'column-resizer', role: 'separator', tabIndex: 0,
+      'aria-orientation': 'vertical', 'aria-label': `${label}: Spaltenbreite ändern`,
+      'aria-valuemin': minimums[column],
+      title: `${label} breiter/schmaler ziehen · Doppelklick für Standardaufteilung` });
+    const setWidth = value => {
+      const following = layoutColumns.slice(layoutColumns.indexOf(column) + 1);
+      const available = following.reduce((sum, next) => sum + widths[next] - minimums[next], 0);
+      const target = Math.max(minimums[column], Math.min(widths[column] + available, Math.round(value)));
+      let change = target - widths[column];
+      widths[column] = target;
+      if (change < 0) widths[following[0]] -= change;
+      else for (const next of following) {
+        const taken = Math.min(change, widths[next] - minimums[next]);
+        widths[next] -= taken;
+        change -= taken;
+      }
+      apply();
+      position();
+    };
+    let drag = null;
+    const finish = event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      drag = null;
+      document.body.classList.remove('resizing-columns');
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      save();
+    };
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      freezeWidths();
+      drag = { id: event.pointerId, x: event.clientX, width: widths[column] };
+      handle.setPointerCapture(event.pointerId);
+      document.body.classList.add('resizing-columns');
+    });
+    handle.addEventListener('pointermove', event => {
+      if (drag && event.pointerId === drag.id) setWidth(drag.width + event.clientX - drag.x);
+    });
+    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(event, finish);
+    handle.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === 'Home') { resetWidths(); }
+      else { freezeWidths(); setWidth(widths[column] + (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 20 : 5)); }
+      save();
+    });
+    handle.addEventListener('dblclick', () => { resetWidths(); save(); });
+    header.append(handle);
+    return { cell, handle, column };
+  });
+  function freezeWidths() {
+    if (layoutColumns.every(column => widths[column])) return;
+    const tracks = getComputedStyle(header).gridTemplateColumns.split(' ').map(parseFloat);
+    layoutColumns.forEach((column, index) => { widths[column] = tracks[index]; });
+    fitWidths();
+    apply();
+  }
+  function resetWidths() {
+    for (const column of layoutColumns) delete widths[column];
+    apply(); position();
+  }
+  function position() {
+    const bounds = header.getBoundingClientRect();
+    const tracks = getComputedStyle(header).gridTemplateColumns.split(' ').map(parseFloat);
+    const gap = parseFloat(getComputedStyle(header).columnGap) || 0;
+    for (let index = 0; index < handles.length; index++) {
+      const { handle, cell } = handles[index];
+      const nextColumn = columns[index + 1];
+      const nextCell = nextColumn
+        ? header.querySelector(`[data-sort-column="${nextColumn}"]`).closest(nextColumn === 'area' ? '.metadata-sorts' : 'button')
+        : header.querySelector(':scope > span[aria-hidden="true"]');
+      handle.style.left = `${nextCell.getBoundingClientRect().left - bounds.left - gap / 2}px`;
+      handle.setAttribute('aria-valuenow', String(Math.round(tracks[index] || cell.getBoundingClientRect().width)));
+      if (layoutColumns.every(column => widths[column])) {
+        const following = layoutColumns.slice(index + 1);
+        handle.setAttribute('aria-valuemax', String(Math.floor(widths[columns[index]] + following.reduce((sum, column) => sum + widths[column] - minimums[column], 0))));
+      }
+    }
+  }
+  function fitWidths() {
+    if (window.innerWidth <= 1100) { apply(); return; }
+    if (!layoutColumns.every(column => widths[column])) { apply(); return; }
+    minimums.actions = actionMinimum();
+    for (const column of layoutColumns) widths[column] = Math.max(minimums[column], widths[column]);
+    const style = getComputedStyle(header);
+    const budget = header.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      - 5 * parseFloat(style.columnGap);
+    const minimumTotal = layoutColumns.reduce((sum, column) => sum + minimums[column], 0);
+    const total = layoutColumns.reduce((sum, column) => sum + widths[column], 0);
+    if (budget < minimumTotal || !Number.isFinite(budget)) { resetWidths(); return; }
+    if (Math.abs(total - budget) < 0.5) return;
+    if (total < budget) widths.progress += budget - total;
+    else {
+      const scale = (budget - minimumTotal) / (total - minimumTotal);
+      for (const column of layoutColumns) widths[column] = minimums[column] + (widths[column] - minimums[column]) * scale;
+    }
+    apply();
+  }
+  apply();
+  new ResizeObserver(() => { fitWidths(); position(); }).observe(header);
+  position();
+}
+setupColumnResizing();
+
+$('toggle-all-quests').addEventListener('click', () => {
+  const collapse = state.quests.length > 0 && state.quests.every(q => expanded.has(q.id));
+  for (const quest of state.quests) {
+    if (collapse) expanded.delete(quest.id);
+    else expanded.add(quest.id);
+  }
+  render();
+});
+
 document.querySelectorAll('[data-sort-column]').forEach(button => button.addEventListener('click', () => {
   const column = button.dataset.sortColumn;
   questSort.direction = questSort.column === column ? -questSort.direction : 1;

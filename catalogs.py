@@ -4,7 +4,7 @@ import re
 import unicodedata
 import uuid
 
-KINDS = ('monster', 'state', 'rank', 'reward_type', 'area', 'quest_type', 'tag')
+KINDS = ('monster', 'state', 'rank', 'reward_type', 'area', 'quest_type')
 NAMESPACE = uuid.UUID('1dbb9727-3381-4b04-bda2-7a458e5ab748')
 IMAGE_PATTERN = re.compile(r'[a-f0-9]{64}\.(png|jpg|gif|webp)')
 
@@ -29,10 +29,10 @@ def validate_record(raw):
     if not isinstance(name, str) or not name.strip() or len(name) > 200 or not norm(name):
         raise ValueError('Ein Name mit höchstens 200 Zeichen wird benötigt.')
     record = {'id': qid, 'kind': raw['kind'], 'name': name.strip()}
-    if raw['kind'] == 'reward_type':
+    if raw['kind'] in ('reward_type', 'area'):
         color = raw.get('color')
         if color is not None and (not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color)):
-            raise ValueError('Eine Belohnungsfarbe im Format #RRGGBB wird benötigt.')
+            raise ValueError('Eine Kategoriefarbe im Format #RRGGBB wird benötigt.')
         record['color'] = color.upper() if color is not None else None
     if raw['kind'] == 'state':
         color = raw.get('color')
@@ -154,6 +154,8 @@ def import_records(db, records, update=False):
 def resolve_quest(db, quest, allow_create=False):
     """Canonical IDs are authoritative; names are readable export/display snapshots."""
     quest = json.loads(json.dumps(quest))
+    quest.pop('tags', None)
+    quest.pop('tag_ids', None)
 
     def resolve(kind, name, qid=None):
         record = find(db, kind, qid=qid, name=name)
@@ -172,13 +174,13 @@ def resolve_quest(db, quest, allow_create=False):
         monster = resolve('monster', target['monster'], target.get('monster_id'))
         status = resolve('state', target['type'], target.get('type_id'))
         target.update(monster=monster['name'], monster_id=monster['id'], type=status['name'], type_id=status['id'])
-    for field, kind in [('reward_types', 'reward_type'), ('tags', 'tag')]:
+    for field, kind in [('reward_types', 'reward_type')]:
         names = quest.get(field, [])
-        ids = quest.get('reward_type_ids' if field == 'reward_types' else 'tag_ids', [])
+        ids = quest.get('reward_type_ids', [])
         records = [resolve(kind, name, ids[i] if i < len(ids) else None) for i, name in enumerate(names)]
         records = list({record['id']: record for record in records}.values())
         quest[field] = [record['name'] for record in records]
-        quest['reward_type_ids' if field == 'reward_types' else 'tag_ids'] = [record['id'] for record in records]
+        quest['reward_type_ids'] = [record['id'] for record in records]
     for field, kind in [('area', 'area'), ('quest_type', 'quest_type')]:
         if quest.get(field):
             record = resolve(kind, quest[field], quest.get(field + '_id'))

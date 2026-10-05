@@ -223,3 +223,6 @@ __marimo__/
 /data/
 /.test-artifacts/
 /.python-path
+
+# Other
+ToDo.txt

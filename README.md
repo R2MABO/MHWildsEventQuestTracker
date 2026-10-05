@@ -41,22 +41,28 @@ Das Archivsymbol neben „Questliste teilen“ erstellt ein ausdrücklich **priv
 
 ## Quests und Filter
 
+Der Caret-Button rechts neben der Suche klappt alle Quests gemeinsam auf oder zu. Einzelne Quests lassen sich weiterhin über ihren Namen auf- und einklappen.
+
+Im Listenkopf lassen sich die Breiten von Quest, Rang, Gebiet, Belohnung und Fortschritt an den senkrechten Griffen ziehen (auf größeren Ansichten). Beim Verbreitern geben die Spalten rechts Platz bis zu ihrer Mindestbreite ab; beim Fortschritt wird die Bildspalte rechts davon breiter oder schmaler. Die Bildvorschau und der Bearbeitungsbutton bleiben rechtsbündig; alle Spalten und der Bearbeitungsbutton bleiben innerhalb der Liste. Die Einstellung bleibt in diesem Browser gespeichert; beim ersten Start gilt die Standardaufteilung. Ein Doppelklick auf einen Griff stellt die Standardaufteilung wieder her. Die Griffe lassen sich auch mit Tab fokussieren und mit den Pfeiltasten bedienen (Umschalt für größere Schritte, Pos1 für die Standardaufteilung).
+
 - Quests anlegen, bearbeiten und mit Bestätigung löschen; mehrere Jagdziele mit Anzahl, einem Monster aus der durchsuchbaren Icon-Liste und einem unabhängig gewählten Zustand (Normal, Tempered, Frenzy, Archtempered oder eigene Zustände).
 - Rang, Sterne (auch 11+), Jägerrangbeschränkung, mehrere Belohnungsarten als Tags, mehrere benannte Belohnungen mit eigener benötigter Anzahl als Freitext, Notizen und Bilder.
-- Suche nach Questname, Monster oder Belohnung; kombinierbare Filter für Fortschritt, Rang, Sterne, eigenen Jägerrang, Monster, Monsterzustand, Belohnungsarten, Gebiet, Questtyp und eigene Tags. Belohnungsarten innerhalb der Auswahl werden mit ODER kombiniert; verschiedene Filtergruppen mit UND. Monster und Zustand müssen auf dasselbe Jagdziel passen.
+- Suche nach Questname, Monster oder Belohnung; kombinierbare Filter für Fortschritt, Rang, Sterne, eigenen Jägerrang, Monster, Monsterzustand, Belohnungsarten, Gebiet, Questtyp. Belohnungsarten innerhalb der Auswahl werden mit ODER kombiniert; verschiedene Filtergruppen mit UND. Monster und Zustand müssen auf dasselbe Jagdziel passen.
 - „Alle Belohnungen“ setzt automatisch „Erster Abschluss“. „Alle Belohnungen“ zurücknehmen lässt den Erstabschluss stehen. Wird der Erstabschluss zurückgenommen, wird auch „Alle Belohnungen“ zurückgenommen.
 - Auf den Questnamen klicken, um Details aufzuklappen; auf ein Bild klicken, um die Galerie zu öffnen. `/` fokussiert die Suche, Pfeiltasten wechseln Galeriebilder, Escape schließt Dialoge.
 - Sterne schlagen Low-Rank (1–3), High-Rank (4–10) oder Master-Rank (11+) vor. Diese Zuordnung ist eine editierbare Ausgangseinstellung, kein unveränderliches Spiellimit.
 
 ## Stammdaten
 
-Über **+ Neu** eine Quest oder einen Eintrag für Monster, Monsterzustände, Ränge, Belohnungsarten, Gebiete, Questtypen und eigene Tags anlegen. Kleine Plusbuttons im Questeditor ergänzen die jeweilige Liste und wählen den neuen Eintrag direkt aus. Gebiete und Tags starten leer; Questtypen enthalten Jagd, Fang und Sammeln. Monster können eigene Icons erhalten. Ein Zustand bekommt eine frei wählbare Farbe per Farbwähler oder Hexcode. Die Icon-Umrandung verwendet exakt diese Farbe; Normal/ohne Zustand hat keine Border. Ausgangsfarben: Tempered `#7837FC`, Archtempered `#BE4233`, Frenzy `#1C0037`.
+Über **+ Neu** eine Quest oder einen Eintrag für Monster, Monsterzustände, Ränge, Belohnungsarten, Gebiete, Questtypen anlegen. Kleine Plusbuttons im Questeditor ergänzen die jeweilige Liste und wählen den neuen Eintrag direkt aus. Gebiete starten leer; Questtypen enthalten Jagd, Fang und Sammeln. Monster können eigene Icons erhalten. Ein Zustand bekommt eine frei wählbare Farbe per Farbwähler oder Hexcode. Die Icon-Umrandung verwendet exakt diese Farbe; Normal/ohne Zustand hat keine Border. Ausgangsfarben: Tempered `#7837FC`, Archtempered `#BE4233`, Frenzy `#1C0037`.
 
 **Stammdaten verwalten** bietet Suche, Bearbeiten und Zusammenführen pro Kategorie. Umbenennen aktualisiert alle zugeordneten Quests, während IDs und Fortschritt erhalten bleiben. Zusammenführen übernimmt die Zuordnungen in den beibehaltenen Eintrag; alte Namen und IDs bleiben für spätere Imports bekannt. Normal bleibt als neutraler Zustand erhalten. Ränge können einen optionalen Sternbereich für den automatischen Vorschlag bekommen.
 
 Belohnungsarten erhalten unter **Stammdaten verwalten → Belohnungsart → Bearbeiten** eine eigene Kategoriefarbe per Farbwähler oder Hexcode mit Vorschau. Die Farbe erscheint in der Questliste, den Filtern und im Questeditor; die Schriftfarbe passt sich für lesbaren Kontrast an. **Standardfarbe verwenden** wählt die kräftige Standardfarbe der jeweiligen Kategorie: Ausrüstung Gold, Materialien Cyan, Artian Material Pink, Rüstkugeln Orange, Dekorationen Violett, Jägerrang XP Limette und Kochzutaten Mint. Eigene Kategorien erhalten automatisch eine Farbe. Eigene Kategoriefarben werden mit den Stammdaten gespeichert und in Questlisten und Backups exportiert.
 
 Beim ersten Start mit einer bestehenden Version-1-Datenbank entsteht vor der Migration eine Sicherung unter `data/migration-backup-v1/quests.sqlite`. Die Nutzerdatenbank bleibt getrennt; Quests und Häkchen bleiben erhalten.
+
+Gebiete bekommen ebenfalls eine Kategoriefarbe mit Vorschau unter **Stammdaten verwalten → Gebiet → Bearbeiten**. Sie erscheinen als farbige Labels zwischen Belohnung und Fortschritt in jeder Questzeile. Im Listenkopf sortiert **Gebiet** auf- oder absteigend; Quests ohne Zuordnung stehen immer am Ende. Die Farben bleiben beim Export und Import erhalten. Custom Tags werden nicht mehr unterstützt; vorhandene Zuordnungen werden beim Start entfernt, ältere ZIP-Dateien bleiben importierbar. Vor der Datenbankumstellung wird eine Sicherung im Datenordner angelegt.
 
 ## Theme bearbeiten
 
